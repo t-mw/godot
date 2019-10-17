@@ -945,6 +945,7 @@ bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_f
 
 	btVector3 motion;
 	G_TO_B(p_motion, motion);
+	bool has_collision = false;
 	{
 		// Phase two - sweep test, from a secure position without margin
 
@@ -992,6 +993,24 @@ bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_f
 				/// Since for each sweep test I fix the motion of new shapes in base the recover result,
 				/// if another shape will hit something it means that has a deepest penetration respect the previous shape
 				motion *= btResult.m_closestHitFraction;
+				/// jitspoe - fix case where collision happens but we don't get any results returned.
+				has_collision = true;
+
+				if (r_result) {
+					const btRigidBody *btRigid = static_cast<const btRigidBody *>(btResult.m_hitCollisionObject);
+					CollisionObjectBullet *collisionObject = static_cast<CollisionObjectBullet *>(btRigid->getUserPointer());
+
+					B_TO_G(motion, r_result->remainder); // is the remaining movements
+					r_result->remainder = p_motion - r_result->remainder;
+
+					B_TO_G(btResult.m_hitPointWorld, r_result->collision_point);
+					B_TO_G(btResult.m_hitNormalWorld, r_result->collision_normal);
+					//B_TO_G(btRigid->getVelocityInLocalPoint(r_recover_result.pointWorld - btRigid->getWorldTransform().getOrigin()), r_result->collider_velocity); // It calculates velocity at point and assign it using special function Bullet_to_Godot
+					r_result->collider = collisionObject->get_self();
+					r_result->collider_id = collisionObject->get_instance_id();
+					//r_result->collider_shape = r_recover_result.other_compound_shape_index;
+					//r_result->collision_local_shape = r_recover_result.local_shape_most_recovered;
+				}
 			}
 		}
 
@@ -1036,13 +1055,13 @@ bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_f
 				normalLine->add_vertex(r_result->collision_point + r_result->collision_normal * 10);
 				normalLine->end();
 #endif
-			} else {
+			} else if (!has_collision) {
 				r_result->remainder = Vector3();
 			}
 		}
 	}
 
-	return has_penetration;
+	return has_penetration || has_collision;
 }
 
 int SpaceBullet::test_ray_separation(RigidBodyBullet *p_body, const Transform &p_transform, bool p_infinite_inertia, Vector3 &r_recover_motion, PhysicsServer::SeparationResult *r_results, int p_result_max, float p_margin) {
