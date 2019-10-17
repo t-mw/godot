@@ -1,0 +1,17 @@
+Open developer command prompt for vs 2019
+scons p=windows tools=yes arch=x86 target=release_debug
+
+You can create a Visual Studio solution via SCons by running SCons with the vsproj=yes parameter, like this:
+scons p=windows vsproj=yes
+
+What I used:
+scons p=windows tools=yes arch=x86 target=release_debug vsproj=yes
+
+https://github.com/Gramps/GodotSteam/tree/godot3-min
+
+
+Attempting linux:
+scons p=linux target=release (didn't work)
+
+Windows release:
+scons p=windows arch=x86 target=release (never mind, just build from vs)
