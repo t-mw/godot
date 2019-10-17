@@ -15,3 +15,16 @@ scons p=linux target=release (didn't work)
 
 Windows release:
 scons p=windows arch=x86 target=release (never mind, just build from vs)
+
+
+Linux release:
+scons p=x11 target=release tools=no
+
+Linux pre-prep:
+sudo apt install xorg-dev
+sudo apt install pkg-config
+build-essential
+scons
+libpulse-dev
+libasound2-dev
+libgl-dev
