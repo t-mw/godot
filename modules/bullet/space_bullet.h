@@ -122,6 +122,7 @@ public:
 	real_t get_delta_time() { return delta_time; }
 	void step(real_t p_delta_time);
 
+	_FORCE_INLINE_ btDynamicsWorld *get_dynamics_world() { return dynamicsWorld; }
 	_FORCE_INLINE_ btBroadphaseInterface *get_broadphase() { return broadphase; }
 	_FORCE_INLINE_ btCollisionDispatcher *get_dispatcher() { return dispatcher; }
 	_FORCE_INLINE_ btSoftBodyWorldInfo *get_soft_body_world_info() { return soft_body_world_info; }
