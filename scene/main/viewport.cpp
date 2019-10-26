@@ -2308,22 +2308,22 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
 				next = from->find_prev_valid_focus();
 			}
 
-			if (!mods && p_event->is_action_pressed("ui_up")) {
+			if (!mods && p_event->is_action_pressed("ui_up") && Input::get_singleton()->is_action_just_pressed("ui_up")) {
 
 				next = from->_get_focus_neighbour(MARGIN_TOP);
 			}
 
-			if (!mods && p_event->is_action_pressed("ui_left")) {
+			if (!mods && p_event->is_action_pressed("ui_left") && Input::get_singleton()->is_action_just_pressed("ui_left")) {
 
 				next = from->_get_focus_neighbour(MARGIN_LEFT);
 			}
 
-			if (!mods && p_event->is_action_pressed("ui_right")) {
+			if (!mods && p_event->is_action_pressed("ui_right") && Input::get_singleton()->is_action_just_pressed("ui_right")) {
 
 				next = from->_get_focus_neighbour(MARGIN_RIGHT);
 			}
 
-			if (!mods && p_event->is_action_pressed("ui_down")) {
+			if (!mods && p_event->is_action_pressed("ui_down") && Input::get_singleton()->is_action_just_pressed("ui_down")) {
 
 				next = from->_get_focus_neighbour(MARGIN_BOTTOM);
 			}
