@@ -30,6 +30,7 @@
 
 #include "item_list.h"
 #include "core/os/os.h"
+#include "core/os/input.h"
 #include "core/project_settings.h"
 
 void ItemList::add_item(const String &p_item, const Ref<Texture> &p_texture, bool p_selectable) {
@@ -593,7 +594,7 @@ void ItemList::_gui_input(const Ref<InputEvent> &p_event) {
 	}
 
 	if (p_event->is_pressed() && items.size() > 0) {
-		if (p_event->is_action("ui_up")) {
+		if (p_event->is_action("ui_up") && Input::get_singleton()->is_action_just_pressed("ui_up")) {
 
 			if (search_string != "") {
 
@@ -628,7 +629,7 @@ void ItemList::_gui_input(const Ref<InputEvent> &p_event) {
 				}
 				accept_event();
 			}
-		} else if (p_event->is_action("ui_down")) {
+		} else if (p_event->is_action("ui_down") && Input::get_singleton()->is_action_just_pressed("ui_down")) {
 
 			if (search_string != "") {
 
@@ -693,7 +694,7 @@ void ItemList::_gui_input(const Ref<InputEvent> &p_event) {
 					break;
 				}
 			}
-		} else if (p_event->is_action("ui_left")) {
+		} else if (p_event->is_action("ui_left") && Input::get_singleton()->is_action_just_pressed("ui_left")) {
 
 			search_string = ""; //any mousepress cancels
 
@@ -705,7 +706,7 @@ void ItemList::_gui_input(const Ref<InputEvent> &p_event) {
 				}
 				accept_event();
 			}
-		} else if (p_event->is_action("ui_right")) {
+		} else if (p_event->is_action("ui_right") && Input::get_singleton()->is_action_just_pressed("ui_right")) {
 
 			search_string = ""; //any mousepress cancels
 
