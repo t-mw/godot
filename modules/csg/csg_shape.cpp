@@ -456,7 +456,7 @@ void CSGShape::_update_shape() {
 		}
 
 		int idx = root_mesh->get_surface_count();
-		root_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, array);
+		root_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, array, Array(), Mesh::ArrayFormat::ARRAY_COMPRESS_DEFAULT & (~Mesh::ArrayFormat::ARRAY_COMPRESS_TEX_UV));
 		root_mesh->surface_set_material(idx, surfaces[i].material);
 	}
 
@@ -2066,6 +2066,8 @@ CSGBrush *CSGPolygon::_build_brush() {
 				int splits = MAX(2, Math::ceil(bl / path_interval));
 				float u1 = 0.0;
 				float u2 = path_continuous_u ? 0.0 : 1.0;
+				float angle_simplify_dot = Math::cos(Math::deg2rad(angle_simplify));
+				bool simplify = angle_simplify > 0.0;
 
 				Transform path_to_this;
 				if (!path_local) {
@@ -2074,6 +2076,7 @@ CSGBrush *CSGPolygon::_build_brush() {
 				}
 
 				Transform prev_xf;
+				Transform prev_prev_xf;
 
 				Vector3 lookat_dir;
 
@@ -2085,6 +2088,9 @@ CSGBrush *CSGPolygon::_build_brush() {
 					p2 = curve->interpolate_baked(0.1);
 					lookat_dir = (p2 - p1).normalized();
 				}
+
+				Vector3 previous_simplify_dir = Vector3(0, 0, 0);
+				int simplify_combined_count = 0;
 
 				for (int i = 0; i <= splits; i++) {
 
@@ -2119,10 +2125,27 @@ CSGBrush *CSGPolygon::_build_brush() {
 					xf = path_to_this * xf;
 
 					if (i > 0) {
+						Vector3 current_dir = (xf.origin - prev_xf.origin).normalized();
+
 						if (path_continuous_u) {
-							u1 = u2;
-							u2 += (prev_xf.origin - xf.origin).length();
+							u1 = (i - 1) * path_interval;
+							u2 = i * path_interval;
 						};
+
+						// If the angles are similar, remove the previous face and replace it with this one.
+						if (simplify && i > 0 && previous_simplify_dir.dot(current_dir) > angle_simplify_dot) {
+							face -= 2 * final_polygon.size();
+							prev_xf = prev_prev_xf;
+							++simplify_combined_count;
+							if (path_continuous_u) {
+								u1 = (i - 1 - simplify_combined_count) * path_interval;
+							} else {
+								u2 = simplify_combined_count + 1;
+							}
+						} else {
+							previous_simplify_dir = current_dir;
+							simplify_combined_count = 0;
+						}
 
 						//put triangles where they belong
 						//add triangles for depth
@@ -2213,7 +2236,18 @@ CSGBrush *CSGPolygon::_build_brush() {
 						}
 					}
 
+					prev_prev_xf = prev_xf;
 					prev_xf = xf;
+				}
+
+				// If we've simplified the mesh, resize the arrays
+				if (face < face_count) {
+					face_count = face;
+					faces.resize(face_count * 3);
+					uvs.resize(face_count * 3);
+					smooth.resize(face_count);
+					materials.resize(face_count);
+					invert.resize(face_count);
 				}
 
 			} break;
@@ -2294,6 +2328,9 @@ void CSGPolygon::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_path_interval", "distance"), &CSGPolygon::set_path_interval);
 	ClassDB::bind_method(D_METHOD("get_path_interval"), &CSGPolygon::get_path_interval);
 
+	ClassDB::bind_method(D_METHOD("set_angle_simplify", "degrees"), &CSGPolygon::set_angle_simplify);
+	ClassDB::bind_method(D_METHOD("get_angle_simplify"), &CSGPolygon::get_angle_simplify);
+
 	ClassDB::bind_method(D_METHOD("set_path_rotation", "mode"), &CSGPolygon::set_path_rotation);
 	ClassDB::bind_method(D_METHOD("get_path_rotation"), &CSGPolygon::get_path_rotation);
 
@@ -2325,6 +2362,7 @@ void CSGPolygon::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "spin_sides", PROPERTY_HINT_RANGE, "3,64,1"), "set_spin_sides", "get_spin_sides");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "path_node", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Path"), "set_path_node", "get_path_node");
 	ADD_PROPERTY(PropertyInfo(Variant::REAL, "path_interval", PROPERTY_HINT_EXP_RANGE, "0.001,1000.0,0.001,or_greater"), "set_path_interval", "get_path_interval");
+	ADD_PROPERTY(PropertyInfo(Variant::REAL, "angle_simplify", PROPERTY_HINT_EXP_RANGE, "0.0,180.0,0.0,or_greater"), "set_angle_simplify", "get_angle_simplify");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "path_rotation", PROPERTY_HINT_ENUM, "Polygon,Path,PathFollow"), "set_path_rotation", "get_path_rotation");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "path_local"), "set_path_local", "is_path_local");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "path_continuous_u"), "set_path_continuous_u", "is_path_continuous_u");
@@ -2424,6 +2462,15 @@ float CSGPolygon::get_path_interval() const {
 	return path_interval;
 }
 
+void CSGPolygon::set_angle_simplify(float angle) {
+	angle_simplify = angle;
+	_make_dirty();
+	update_gizmo(); // not sure if necessary
+}
+float CSGPolygon::get_angle_simplify() const {
+	return angle_simplify;
+}
+
 void CSGPolygon::set_path_rotation(PathRotation p_rotation) {
 	path_rotation = p_rotation;
 	_make_dirty();
@@ -2494,6 +2541,7 @@ CSGPolygon::CSGPolygon() {
 	spin_sides = 8;
 	smooth_faces = false;
 	path_interval = 1;
+	angle_simplify = 0.0;
 	path_rotation = PATH_ROTATION_PATH;
 	path_local = false;
 	path_continuous_u = false;
