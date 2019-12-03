@@ -10,3 +10,4 @@ git checkout 3.1
 git pull upstream 3.1
 
 
+Source tree: View|Search View, Search: Authors
