@@ -1,0 +1,12 @@
+git remote add upstream https://github.com/godotengine/godot.git
+git fetch upstream
+https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork
+pull is fetch+merge:
+
+git checkout master
+git pull upstream master
+
+git checkout 3.1
+git pull upstream 3.1
+
+
