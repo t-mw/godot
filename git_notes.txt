@@ -11,3 +11,14 @@ git pull upstream 3.1
 
 
 Source tree: View|Search View, Search: Authors
+
+
+To make a pull request:
+https://poanchen.github.io/blog/2017/11/12/How-to-create-a-GitHub-pull-request-with-a-specific-commits
+https://docs.godotengine.org/en/3.1/community/contributing/pr_workflow.html
+
+
+Need to make a separate branch for the change and cherry pick the changes we want into that branch.
+git fetch --all
+git checkout -b new-branch-name upstream/master
+
