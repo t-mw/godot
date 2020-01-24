@@ -1861,6 +1861,7 @@ CSGBrush *CSGPolygon::_build_brush() {
 	PoolVector<bool> smooth;
 	PoolVector<Ref<Material> > materials;
 	PoolVector<bool> invert;
+	bool needs_resize = false;
 
 	faces.resize(face_count * 3);
 	uvs.resize(face_count * 3);
@@ -2239,18 +2240,13 @@ CSGBrush *CSGPolygon::_build_brush() {
 					prev_prev_xf = prev_xf;
 					prev_xf = xf;
 				}
-
-				// If we've simplified the mesh, resize the arrays
-				if (face < face_count) {
-					face_count = face;
-					faces.resize(face_count * 3);
-					uvs.resize(face_count * 3);
-					smooth.resize(face_count);
-					materials.resize(face_count);
-					invert.resize(face_count);
-				}
-
 			} break;
+		}
+
+		// If we've simplified the mesh, we need to resize the arrays
+		if (face < face_count) {
+			face_count = face;
+			needs_resize = true;
 		}
 
 		if (face != face_count) {
@@ -2266,6 +2262,15 @@ CSGBrush *CSGPolygon::_build_brush() {
 			// invert UVs on the Y-axis OpenGL = upside down
 			uvsw[i].y = 1.0 - uvsw[i].y;
 		}
+	}
+
+	// If we've simplified the mesh, resize the arrays
+	if (needs_resize) {
+		faces.resize(face_count * 3);
+		uvs.resize(face_count * 3);
+		smooth.resize(face_count);
+		materials.resize(face_count);
+		invert.resize(face_count);
 	}
 
 	brush->build_from_faces(faces, uvs, smooth, materials, invert);
