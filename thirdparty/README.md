@@ -8,25 +8,10 @@
 - License: BSD-3-Clause
 
 
-## b2d_convexdecomp
-
-- Upstream: https://github.com/erincatto/Box2D/tree/master/Contributions/Utilities/ConvexDecomposition
-- Version: git (25615e0, 2015) with modifications
-- License: zlib
-
-The files were adapted to Godot by removing the dependency on b2Math (replacing
-it by b2Glue.h) and commenting out some verbose printf calls.
-Upstream code has not changed in 10 years, no need to keep track of changes.
-
-Important: Some files have Godot-made changes.
-They are marked with `// -- GODOT start --` and `// -- GODOT end --`
-comments.
-
-
 ## bullet
 
 - Upstream: https://github.com/bulletphysics/bullet3
-- Version: git (5ec8339, 2019)
+- Version: 2.89
 - License: zlib
 
 Files extracted from upstream source:
@@ -61,7 +46,7 @@ Files extracted from upstream source:
 ## enet
 
 - Upstream: http://enet.bespin.org
-- Version: 1.3.13
+- Version: 1.3.14 (0eaf48e, 2019)
 - License: MIT
 
 Files extracted from upstream source:
@@ -72,12 +57,14 @@ Files extracted from upstream source:
 
 Important: enet.h, host.c, protocol.c have been slightly modified
 to be usable by godot socket implementation and allow IPv6.
+Apply the patch in the `patches/` folder when syncing on newer upstream
+commits.
+
 Two files (godot.cpp and enet/godot.h) have been added to provide
 enet socket implementation using Godot classes.
+
 It is still possible to build against a system wide ENet but doing so
 will limit it's functionality to IPv4 only.
-Check the diff of enet.h, protocol.c, and host.c with the 1.3.13
-tarball before the next update.
 
 
 ## etc2comp
@@ -250,7 +237,7 @@ from the Android NDK r18.
 ## libwebp
 
 - Upstream: https://chromium.googlesource.com/webm/libwebp/
-- Version: 1.0.3
+- Version: 1.1.0
 - License: BSD-3-Clause
 
 Files extracted from upstream source:
@@ -266,10 +253,11 @@ changes are marked with `// -- GODOT --` comments.
 ## mbedtls
 
 - Upstream: https://tls.mbed.org/
-- Version: 2.16.3
+- Version: 2.16.4
 - License: Apache 2.0
 
 File extracted from upstream release tarball (`-apache.tgz` variant):
+
 - All `*.h` from `include/mbedtls/` to `thirdparty/mbedtls/include/mbedtls/`
 - All `*.c` from `library/` to `thirdparty/mbedtls/library/`
 - LICENSE and apache-2.0.txt files
@@ -511,15 +499,13 @@ File extracted from upstream release tarball:
 ## xatlas
 
 - Upstream: https://github.com/jpcy/xatlas
-- Version: git (b4b5426, 2019)
+- Version: git (e12ea82, 2019)
 - License: MIT
 
 Files extracted from upstream source:
 
 - `xatlas.{cpp,h}`
-
-Note: License is marked as Public Domain in the files, but it was
-later clarified upstream to MIT license.
+- `LICENSE`
 
 
 ## zlib

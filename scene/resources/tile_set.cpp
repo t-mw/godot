@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2020 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2020 Godot Engine contributors (cf. AUTHORS.md).   */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -1038,6 +1038,7 @@ void TileSet::_tile_set_shapes(int p_id, const Array &p_shapes) {
 	}
 
 	tile_map[p_id].shapes_data = shapes_data;
+	emit_changed();
 }
 
 Array TileSet::_tile_get_shapes(int p_id) const {
@@ -1232,6 +1233,7 @@ void TileSet::_bind_methods() {
 	BIND_ENUM_CONSTANT(BIND_TOP);
 	BIND_ENUM_CONSTANT(BIND_TOPRIGHT);
 	BIND_ENUM_CONSTANT(BIND_LEFT);
+	BIND_ENUM_CONSTANT(BIND_CENTER);
 	BIND_ENUM_CONSTANT(BIND_RIGHT);
 	BIND_ENUM_CONSTANT(BIND_BOTTOMLEFT);
 	BIND_ENUM_CONSTANT(BIND_BOTTOM);

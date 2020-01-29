@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2020 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2020 Godot Engine contributors (cf. AUTHORS.md).   */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -371,8 +371,8 @@ private:
 
 			fdialog->set_mode(FileDialog::MODE_OPEN_FILE);
 			fdialog->clear_filters();
-			fdialog->add_filter("project.godot ; " VERSION_NAME " Project");
-			fdialog->add_filter("*.zip ; Zip File");
+			fdialog->add_filter(vformat("project.godot ; %s %s", VERSION_NAME, TTR("Project")));
+			fdialog->add_filter("*.zip ; " + TTR("ZIP File"));
 		} else {
 			fdialog->set_mode(FileDialog::MODE_OPEN_DIR);
 		}
@@ -1313,7 +1313,9 @@ void ProjectList::create_project_item_control(int p_index) {
 	hb->set_is_favorite(item.favorite);
 
 	TextureRect *tf = memnew(TextureRect);
-	tf->set_texture(get_icon("DefaultProjectIcon", "EditorIcons"));
+	// The project icon may not be loaded by the time the control is displayed,
+	// so use a loading placeholder.
+	tf->set_texture(get_icon("ProjectIconLoading", "EditorIcons"));
 	if (item.missing) {
 		tf->set_modulate(Color(1, 1, 1, 0.5));
 	}
@@ -1409,9 +1411,7 @@ void ProjectList::sort_projects() {
 
 	for (int i = 0; i < _projects.size(); ++i) {
 		Item &item = _projects.write[i];
-		if (item.control->is_visible()) {
-			item.control->get_parent()->move_child(item.control, i);
-		}
+		item.control->get_parent()->move_child(item.control, i);
 	}
 
 	// Rewind the coroutine because order of projects changed
@@ -1983,6 +1983,7 @@ void ProjectManager::_global_menu_action(const Variant &p_id, const Variant &p_m
 	int id = (int)p_id;
 	if (id == ProjectList::GLOBAL_NEW_WINDOW) {
 		List<String> args;
+		args.push_back("-p");
 		String exec = OS::get_singleton()->get_executable_path();
 
 		OS::ProcessID pid = 0;
@@ -2420,12 +2421,11 @@ ProjectManager::ProjectManager() {
 	FileDialog::set_default_show_hidden_files(EditorSettings::get_singleton()->get("filesystem/file_dialog/show_hidden_files"));
 
 	set_anchors_and_margins_preset(Control::PRESET_WIDE);
-	set_theme(create_editor_theme());
+	set_theme(create_custom_theme());
 
 	gui_base = memnew(Control);
 	add_child(gui_base);
 	gui_base->set_anchors_and_margins_preset(Control::PRESET_WIDE);
-	gui_base->set_theme(create_custom_theme());
 
 	Panel *panel = memnew(Panel);
 	gui_base->add_child(panel);
@@ -2438,7 +2438,7 @@ ProjectManager::ProjectManager() {
 
 	String cp;
 	cp += 0xA9;
-	OS::get_singleton()->set_window_title(VERSION_NAME + String(" - ") + TTR("Project Manager") + " - " + cp + " 2007-2019 Juan Linietsky, Ariel Manzur & Godot Contributors");
+	OS::get_singleton()->set_window_title(VERSION_NAME + String(" - ") + TTR("Project Manager") + " - " + cp + " 2007-2020 Juan Linietsky, Ariel Manzur & Godot Contributors");
 
 	Control *center_box = memnew(Control);
 	center_box->set_v_size_flags(SIZE_EXPAND_FILL);
