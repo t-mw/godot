@@ -695,9 +695,20 @@ void InputEventJoypadMotion::set_axis_value(float p_value) {
 	axis_value = p_value;
 }
 
+
 float InputEventJoypadMotion::get_axis_value() const {
 
 	return axis_value;
+}
+
+void InputEventJoypadMotion::set_perpendicular_value(float p_value) {
+
+	perpendicular_axis_value = p_value;
+}
+
+float InputEventJoypadMotion::get_perpendicular_value() const {
+
+	return perpendicular_axis_value;
 }
 
 bool InputEventJoypadMotion::is_pressed() const {
@@ -713,8 +724,20 @@ bool InputEventJoypadMotion::action_match(const Ref<InputEvent> &p_event, bool *
 
 	bool match = (axis == jm->axis); // Matches even if not in the same direction, but returns a "not pressed" event.
 	if (match) {
-		bool same_direction = (((axis_value < 0) == (jm->axis_value < 0)) || jm->axis_value == 0);
-		bool pressed = same_direction ? Math::abs(jm->get_axis_value()) >= p_deadzone : false;
+		real_t deadzone = p_deadzone;
+		real_t perp_value = jm->get_perpendicular_value();
+		real_t compare_axis_value = jm->get_axis_value();
+		if (perp_value) {
+			Vector2 vec(compare_axis_value, perp_value);
+			deadzone = Math::abs(vec.normalized().x) * deadzone; // Circular deadzone
+			// Break controller into 8 slices, so deadzone depends on the angle rather than being per-axis (make diagonal movement behave as expected)
+			real_t wedge_deadzone = 0.4142135623730950488016887242097 * Math::abs(perp_value); // 1 / tan(3/4 90 degrees).  The slope of 1/8 of a circle
+			if (wedge_deadzone > deadzone) {
+				deadzone = wedge_deadzone;
+			}
+		}
+		bool same_direction = (((axis_value < 0) == (compare_axis_value < 0)) || compare_axis_value == 0);
+		bool pressed = same_direction ? Math::abs(compare_axis_value) >= deadzone : false;
 		if (p_pressed != NULL)
 			*p_pressed = pressed;
 		if (p_strength != NULL) {
@@ -722,7 +745,7 @@ bool InputEventJoypadMotion::action_match(const Ref<InputEvent> &p_event, bool *
 				if (p_deadzone == 1.0f) {
 					*p_strength = 1.0f;
 				} else {
-					*p_strength = CLAMP(Math::inverse_lerp(p_deadzone, 1.0f, Math::abs(jm->get_axis_value())), 0.0f, 1.0f);
+					*p_strength = CLAMP(Math::inverse_lerp(deadzone, 1.0f, Math::abs(compare_axis_value)), 0.0f, 1.0f);
 				}
 			} else {
 				*p_strength = 0.0f;
