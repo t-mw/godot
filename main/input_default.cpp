@@ -774,14 +774,14 @@ void InputDefault::joy_button(int p_device, int p_button, bool p_pressed) {
 		if (map.index == JOY_L2 || map.index == JOY_R2) {
 			float value = p_pressed ? 1.0f : 0.0f;
 			int axis = map.index == JOY_L2 ? JOY_ANALOG_L2 : JOY_ANALOG_R2;
-			_axis_event(p_device, axis, value);
+			_axis_event(p_device, axis, value, 0.0);
 		}
 		_button_event(p_device, map.index, p_pressed);
 		return;
 	}
 
 	if (map.type == TYPE_AXIS) {
-		_axis_event(p_device, map.index, p_pressed ? 1.0 : 0.0);
+		_axis_event(p_device, map.index, p_pressed ? 1.0 : 0.0, 0.0);
 	}
 	// no event?
 }
@@ -826,8 +826,26 @@ void InputDefault::joy_axis(int p_device, int p_axis, const JoyAxis &p_value) {
 	joy.last_axis[p_axis] = p_value.value;
 	float val = p_value.min == 0 ? -1.0f + 2.0f * p_value.value : p_value.value;
 
+	// Get in the perpendicular value so we can do radial deadzone checks.
+	// Note: This isn't perfect because we're potentially using frame-old values for some axes.  Could do a prepass to generate all these values, but not sure if the complexity is worth it.
+	float perpendicular_value = 0.0;
+	switch (p_axis) {
+		case JOY_ANALOG_LX:
+			perpendicular_value = joy.last_axis[JOY_ANALOG_LY];
+			break;
+		case JOY_ANALOG_LY:
+			perpendicular_value = joy.last_axis[JOY_ANALOG_LX];
+			break;
+		case JOY_ANALOG_RX:
+			perpendicular_value = joy.last_axis[JOY_ANALOG_RY];
+			break;
+		case JOY_ANALOG_RY:
+			perpendicular_value = joy.last_axis[JOY_ANALOG_RX];
+			break;
+	}
+
 	if (joy.mapping == -1) {
-		_axis_event(p_device, p_axis, val);
+		_axis_event(p_device, p_axis, val, perpendicular_value);
 		return;
 	};
 
@@ -844,7 +862,7 @@ void InputDefault::joy_axis(int p_device, int p_axis, const JoyAxis &p_value) {
 		if (map.index == JOY_L2 || map.index == JOY_R2) {
 			float value = p_value.min == 0 ? p_value.value : 0.5f + p_value.value / 2.0f;
 			int axis = map.index == JOY_L2 ? JOY_ANALOG_L2 : JOY_ANALOG_R2;
-			_axis_event(p_device, axis, value);
+			_axis_event(p_device, axis, value, perpendicular_value);
 		}
 
 		if (map.index == JOY_DPAD_UP || map.index == JOY_DPAD_DOWN) {
@@ -894,8 +912,7 @@ void InputDefault::joy_axis(int p_device, int p_axis, const JoyAxis &p_value) {
 	}
 
 	if (map.type == TYPE_AXIS) {
-
-		_axis_event(p_device, map.index, val);
+		_axis_event(p_device, map.index, val, perpendicular_value);
 		return;
 	}
 	//printf("invalid mapping\n");
@@ -944,13 +961,14 @@ void InputDefault::_button_event(int p_device, int p_index, bool p_pressed) {
 	parse_input_event(ievent);
 }
 
-void InputDefault::_axis_event(int p_device, int p_axis, float p_value) {
+void InputDefault::_axis_event(int p_device, int p_axis, float p_value, float p_perpendicular_value) {
 
 	Ref<InputEventJoypadMotion> ievent;
 	ievent.instance();
 	ievent->set_device(p_device);
 	ievent->set_axis(p_axis);
 	ievent->set_axis_value(p_value);
+	ievent->set_perpendicular_value(p_perpendicular_value);
 
 	parse_input_event(ievent);
 };

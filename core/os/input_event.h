@@ -386,6 +386,7 @@ class InputEventJoypadMotion : public InputEvent {
 	GDCLASS(InputEventJoypadMotion, InputEvent);
 	int axis; ///< Joypad axis
 	float axis_value; ///< -1 to 1
+	float perpendicular_axis_value; /// ex: If the axis is the X-axis, this would be the value of the Y-axis (used for circular deadzone calculation).
 
 protected:
 	static void _bind_methods();
@@ -396,6 +397,9 @@ public:
 
 	void set_axis_value(float p_value);
 	float get_axis_value() const;
+
+	void set_perpendicular_value(float p_value);
+	float get_perpendicular_value() const;
 
 	virtual bool is_pressed() const;
 
