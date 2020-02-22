@@ -1372,8 +1372,10 @@ bool AnimationPlayer::is_valid() const {
 }
 
 float AnimationPlayer::get_current_animation_position() const {
-
-	ERR_FAIL_COND_V(!playback.current.from, 0);
+	if (unlikely(!playback.current.from)) { // jit - don't need an error for this.  Just move on.
+		return 0;
+	}
+	//ERR_FAIL_COND_V(!playback.current.from, 0);
 	return playback.current.pos;
 }
 
