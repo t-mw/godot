@@ -53,6 +53,11 @@
 #endif
 #endif
 
+#if !defined(GLES_OVER_GL)
+#define GL_TEXTURE_2D_ARRAY 0x8C1A
+#define GL_TEXTURE_3D 0x806F
+#endif
+
 static const GLenum _cube_side_enum[6] = {
 
 	GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
@@ -365,7 +370,7 @@ bool RasterizerSceneGLES2::shadow_atlas_update_light(RID p_atlas, RID p_light_in
 				// it is take but invalid, so we can take it
 
 				shadow_atlas->shadow_owners.erase(sh->owner);
-				LightInstance *sli = light_instance_owner.get(sh->owner);
+				LightInstance *sli = light_instance_owner.getornull(sh->owner);
 				sli->shadow_atlases.erase(p_atlas);
 			}
 
@@ -407,7 +412,7 @@ bool RasterizerSceneGLES2::shadow_atlas_update_light(RID p_atlas, RID p_light_in
 			// it is take but invalid, so we can take it
 
 			shadow_atlas->shadow_owners.erase(sh->owner);
-			LightInstance *sli = light_instance_owner.get(sh->owner);
+			LightInstance *sli = light_instance_owner.getornull(sh->owner);
 			sli->shadow_atlases.erase(p_atlas);
 		}
 
@@ -971,7 +976,7 @@ void RasterizerSceneGLES2::_add_geometry(RasterizerStorageGLES2::Geometry *p_geo
 	}
 
 	if (!material) {
-		material = storage->material_owner.getptr(default_material);
+		material = storage->material_owner.getornull(default_material);
 	}
 
 	ERR_FAIL_COND(!material);
@@ -1018,10 +1023,10 @@ void RasterizerSceneGLES2::_add_geometry_with_material(RasterizerStorageGLES2::G
 		if (!p_material->shader->spatial.uses_alpha_scissor && !p_material->shader->spatial.writes_modelview_or_projection && !p_material->shader->spatial.uses_vertex && !p_material->shader->spatial.uses_discard && p_material->shader->spatial.depth_draw_mode != RasterizerStorageGLES2::Shader::Spatial::DEPTH_DRAW_ALPHA_PREPASS) {
 			//shader does not use discard and does not write a vertex position, use generic material
 			if (p_instance->cast_shadows == VS::SHADOW_CASTING_SETTING_DOUBLE_SIDED) {
-				p_material = storage->material_owner.getptr(!p_shadow_pass && p_material->shader->spatial.uses_world_coordinates ? default_worldcoord_material_twosided : default_material_twosided);
+				p_material = storage->material_owner.getornull(!p_shadow_pass && p_material->shader->spatial.uses_world_coordinates ? default_worldcoord_material_twosided : default_material_twosided);
 				mirror = false;
 			} else {
-				p_material = storage->material_owner.getptr(!p_shadow_pass && p_material->shader->spatial.uses_world_coordinates ? default_worldcoord_material : default_material);
+				p_material = storage->material_owner.getornull(!p_shadow_pass && p_material->shader->spatial.uses_world_coordinates ? default_worldcoord_material : default_material);
 			}
 		}
 
@@ -1237,13 +1242,13 @@ void RasterizerSceneGLES2::_fill_render_list(InstanceBase **p_cull_result, int p
 			} break;
 
 			case VS::INSTANCE_MULTIMESH: {
-				RasterizerStorageGLES2::MultiMesh *multi_mesh = storage->multimesh_owner.getptr(instance->base);
+				RasterizerStorageGLES2::MultiMesh *multi_mesh = storage->multimesh_owner.getornull(instance->base);
 				ERR_CONTINUE(!multi_mesh);
 
 				if (multi_mesh->size == 0 || multi_mesh->visible_instances == 0)
 					continue;
 
-				RasterizerStorageGLES2::Mesh *mesh = storage->mesh_owner.getptr(multi_mesh->mesh);
+				RasterizerStorageGLES2::Mesh *mesh = storage->mesh_owner.getornull(multi_mesh->mesh);
 				if (!mesh)
 					continue;
 
@@ -1256,7 +1261,7 @@ void RasterizerSceneGLES2::_fill_render_list(InstanceBase **p_cull_result, int p
 			} break;
 
 			case VS::INSTANCE_IMMEDIATE: {
-				RasterizerStorageGLES2::Immediate *im = storage->immediate_owner.getptr(instance->base);
+				RasterizerStorageGLES2::Immediate *im = storage->immediate_owner.getornull(instance->base);
 				ERR_CONTINUE(!im);
 
 				_add_geometry(im, instance, NULL, -1, p_depth_pass, p_shadow_pass);
@@ -1343,6 +1348,7 @@ bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_m
 	const Pair<StringName, RID> *textures = p_material->textures.ptr();
 
 	const ShaderLanguage::ShaderNode::Uniform::Hint *texture_hints = p_material->shader->texture_hints.ptr();
+	const ShaderLanguage::DataType *texture_types = p_material->shader->texture_types.ptr();
 
 	state.scene_shader.set_uniform(SceneShaderGLES2::SKELETON_TEXTURE_SIZE, p_skeleton_tex_size);
 
@@ -1356,22 +1362,66 @@ bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_m
 
 		if (!t) {
 
-			switch (texture_hints[i]) {
-				case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK_ALBEDO:
-				case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.black_tex);
+			GLenum target = GL_TEXTURE_2D;
+			GLuint tex = 0;
+			switch (texture_types[i]) {
+				case ShaderLanguage::TYPE_ISAMPLER2D:
+				case ShaderLanguage::TYPE_USAMPLER2D:
+				case ShaderLanguage::TYPE_SAMPLER2D: {
+
+					switch (texture_hints[i]) {
+						case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK_ALBEDO:
+						case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK: {
+							tex = storage->resources.black_tex;
+						} break;
+						case ShaderLanguage::ShaderNode::Uniform::HINT_ANISO: {
+							tex = storage->resources.aniso_tex;
+						} break;
+						case ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL: {
+							tex = storage->resources.normal_tex;
+						} break;
+						default: {
+							tex = storage->resources.white_tex;
+						} break;
+					}
+
 				} break;
-				case ShaderLanguage::ShaderNode::Uniform::HINT_ANISO: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.aniso_tex);
+
+				case ShaderLanguage::TYPE_SAMPLERCUBE: {
+					// TODO
 				} break;
-				case ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.normal_tex);
+
+				case ShaderLanguage::TYPE_ISAMPLER3D:
+				case ShaderLanguage::TYPE_USAMPLER3D:
+				case ShaderLanguage::TYPE_SAMPLER3D: {
+
+					target = GL_TEXTURE_3D;
+					tex = storage->resources.white_tex_3d;
+
+					//switch (texture_hints[i]) {
+					// TODO
+					//}
+
 				} break;
+
+				case ShaderLanguage::TYPE_ISAMPLER2DARRAY:
+				case ShaderLanguage::TYPE_USAMPLER2DARRAY:
+				case ShaderLanguage::TYPE_SAMPLER2DARRAY: {
+
+					target = GL_TEXTURE_2D_ARRAY;
+					tex = storage->resources.white_tex_array;
+
+					//switch (texture_hints[i]) {
+					// TODO
+					//}
+
+				} break;
+
 				default: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.white_tex);
-				} break;
+				}
 			}
 
+			glBindTexture(target, tex);
 			continue;
 		}
 
@@ -1450,7 +1500,7 @@ void RasterizerSceneGLES2::_setup_geometry(RenderList::Element *p_element, Raste
 					//use transform buffer workflow
 					ERR_FAIL_COND(p_skeleton->use_2d);
 
-					PoolVector<float> &transform_buffer = storage->resources.skeleton_transform_cpu_buffer;
+					Vector<float> &transform_buffer = storage->resources.skeleton_transform_cpu_buffer;
 
 					if (!s->attribs[VS::ARRAY_BONES].enabled || !s->attribs[VS::ARRAY_WEIGHTS].enabled) {
 						break; // the whole instance has a skeleton, but this surface is not affected by it.
@@ -1467,10 +1517,10 @@ void RasterizerSceneGLES2::_setup_geometry(RenderList::Element *p_element, Raste
 					const size_t bone_weight_stride = s->attribs[VS::ARRAY_WEIGHTS].stride;
 
 					{
-						PoolVector<float>::Write write = transform_buffer.write();
+						float *write = transform_buffer.ptrw();
 						float *buffer = write.ptr();
 
-						PoolVector<uint8_t>::Read vertex_array_read = s->data.read();
+						const uint8_t *vertex_array_read = s->data.ptr();
 						const uint8_t *vertex_data = vertex_array_read.ptr();
 
 						for (int i = 0; i < s->array_len; i++) {
@@ -1739,7 +1789,7 @@ void RasterizerSceneGLES2::_render_geometry(RenderList::Element *p_element) {
 				storage->info.render.vertices_count += vertices;
 
 				if (c.texture.is_valid() && storage->texture_owner.owns(c.texture)) {
-					RasterizerStorageGLES2::Texture *t = storage->texture_owner.get(c.texture);
+					RasterizerStorageGLES2::Texture *t = storage->texture_owner.getornull(c.texture);
 
 					if (t->redraw_if_visible) {
 						VisualServerRaster::redraw_request();
@@ -3114,9 +3164,9 @@ void RasterizerSceneGLES2::_post_process(Environment *env, const CameraMatrix &p
 			}
 		}
 
-		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_SCREEN, env->glow_blend_mode == VS::GLOW_BLEND_MODE_SCREEN);
-		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_SOFTLIGHT, env->glow_blend_mode == VS::GLOW_BLEND_MODE_SOFTLIGHT);
-		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_REPLACE, env->glow_blend_mode == VS::GLOW_BLEND_MODE_REPLACE);
+		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_SCREEN, env->glow_blend_mode == VS::ENV_GLOW_BLEND_MODE_SCREEN);
+		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_SOFTLIGHT, env->glow_blend_mode == VS::ENV_GLOW_BLEND_MODE_SOFTLIGHT);
+		state.tonemap_shader.set_conditional(TonemapShaderGLES2::USE_GLOW_REPLACE, env->glow_blend_mode == VS::ENV_GLOW_BLEND_MODE_REPLACE);
 	}
 
 	//Adjustments
@@ -3832,11 +3882,11 @@ bool RasterizerSceneGLES2::free(RID p_rid) {
 
 	if (light_instance_owner.owns(p_rid)) {
 
-		LightInstance *light_instance = light_instance_owner.getptr(p_rid);
+		LightInstance *light_instance = light_instance_owner.getornull(p_rid);
 
 		//remove from shadow atlases..
 		for (Set<RID>::Element *E = light_instance->shadow_atlases.front(); E; E = E->next()) {
-			ShadowAtlas *shadow_atlas = shadow_atlas_owner.get(E->get());
+			ShadowAtlas *shadow_atlas = shadow_atlas_owner.getornull(E->get());
 			ERR_CONTINUE(!shadow_atlas->shadow_owners.has(p_rid));
 			uint32_t key = shadow_atlas->shadow_owners[p_rid];
 			uint32_t q = (key >> ShadowAtlas::QUADRANT_SHIFT) & 0x3;
@@ -3851,13 +3901,13 @@ bool RasterizerSceneGLES2::free(RID p_rid) {
 
 	} else if (shadow_atlas_owner.owns(p_rid)) {
 
-		ShadowAtlas *shadow_atlas = shadow_atlas_owner.get(p_rid);
+		ShadowAtlas *shadow_atlas = shadow_atlas_owner.getornull(p_rid);
 		shadow_atlas_set_size(p_rid, 0);
 		shadow_atlas_owner.free(p_rid);
 		memdelete(shadow_atlas);
 	} else if (reflection_probe_instance_owner.owns(p_rid)) {
 
-		ReflectionProbeInstance *reflection_instance = reflection_probe_instance_owner.get(p_rid);
+		ReflectionProbeInstance *reflection_instance = reflection_probe_instance_owner.getornull(p_rid);
 
 		for (int i = 0; i < 6; i++) {
 			glDeleteFramebuffers(1, &reflection_instance->fbo[i]);

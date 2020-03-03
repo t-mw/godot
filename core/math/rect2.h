@@ -60,6 +60,19 @@ struct Rect2 {
 		return true;
 	}
 
+	inline bool intersects_touch(const Rect2 &p_rect) const {
+		if (position.x > (p_rect.position.x + p_rect.size.width))
+			return false;
+		if ((position.x + size.width) < p_rect.position.x)
+			return false;
+		if (position.y > (p_rect.position.y + p_rect.size.height))
+			return false;
+		if ((position.y + size.height) < p_rect.position.y)
+			return false;
+
+		return true;
+	}
+
 	inline real_t distance_to(const Vector2 &p_point) const {
 
 		real_t dist = 0.0;
@@ -372,6 +385,11 @@ struct Rect2i {
 
 		position = begin;
 		size = end - begin;
+	}
+
+	_FORCE_INLINE_ Rect2i abs() const {
+
+		return Rect2i(Point2i(position.x + MIN(size.x, 0), position.y + MIN(size.y, 0)), size.abs());
 	}
 
 	operator String() const { return String(position) + ", " + String(size); }

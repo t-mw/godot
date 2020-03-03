@@ -34,7 +34,8 @@
 #include "core/os/main_loop.h"
 #include "core/os/os.h"
 
-#ifdef GDSCRIPT_ENABLED
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_GDSCRIPT_ENABLED
 
 #include "modules/gdscript/gdscript.h"
 #include "modules/gdscript/gdscript_compiler.h"
@@ -127,7 +128,7 @@ static String _parser_expr(const GDScriptParser::Node *p_expr) {
 
 				case GDScriptParser::OperatorNode::OP_PARENT_CALL:
 					txt += ".";
-					FALLTHROUGH;
+					[[fallthrough]];
 				case GDScriptParser::OperatorNode::OP_CALL: {
 
 					ERR_FAIL_COND_V(c_node->arguments.size() < 1, "");
@@ -1091,7 +1092,7 @@ MainLoop *test(TestType p_type) {
 namespace TestGDScript {
 
 MainLoop *test(TestType p_type) {
-
+	ERR_PRINT("The GDScript module is disabled, therefore GDScript tests cannot be used.");
 	return NULL;
 }
 } // namespace TestGDScript

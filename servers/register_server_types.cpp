@@ -56,23 +56,25 @@
 #include "audio_server.h"
 #include "camera/camera_feed.h"
 #include "camera_server.h"
+#include "core/script_debugger_remote.h"
+#include "navigation_2d_server.h"
+#include "navigation_server.h"
 #include "physics/physics_server_sw.h"
 #include "physics_2d/physics_2d_server_sw.h"
 #include "physics_2d/physics_2d_server_wrap_mt.h"
 #include "physics_2d_server.h"
 #include "physics_server.h"
-#include "scene/debugger/script_debugger_remote.h"
 #include "visual/shader_types.h"
 #include "visual_server.h"
 
-static void _debugger_get_resource_usage(List<ScriptDebuggerRemote::ResourceUsage> *r_usage) {
+static void _debugger_get_resource_usage(ScriptDebuggerRemote::ResourceUsage *r_usage) {
 
 	List<VS::TextureInfo> tinfo;
 	VS::get_singleton()->texture_debug_usage(&tinfo);
 
 	for (List<VS::TextureInfo>::Element *E = tinfo.front(); E; E = E->next()) {
 
-		ScriptDebuggerRemote::ResourceUsage usage;
+		ScriptDebuggerRemote::ResourceInfo usage;
 		usage.path = E->get().path;
 		usage.vram = E->get().bytes;
 		usage.id = E->get().texture;
@@ -82,7 +84,7 @@ static void _debugger_get_resource_usage(List<ScriptDebuggerRemote::ResourceUsag
 		} else {
 			usage.format = itos(E->get().width) + "x" + itos(E->get().height) + "x" + itos(E->get().depth) + " " + Image::get_format_name(E->get().format);
 		}
-		r_usage->push_back(usage);
+		r_usage->infos.push_back(usage);
 	}
 }
 
@@ -107,6 +109,10 @@ static bool has_server_feature_callback(const String &p_feature) {
 	return false;
 }
 
+void preregister_server_types() {
+	shader_types = memnew(ShaderTypes);
+}
+
 void register_server_types() {
 
 	OS::get_singleton()->set_has_server_feature_callback(has_server_feature_callback);
@@ -117,8 +123,6 @@ void register_server_types() {
 	ClassDB::register_virtual_class<Physics2DServer>();
 	ClassDB::register_class<ARVRServer>();
 	ClassDB::register_class<CameraServer>();
-
-	shader_types = memnew(ShaderTypes);
 
 	ClassDB::register_virtual_class<ARVRInterface>();
 	ClassDB::register_class<ARVRPositionalTracker>();
@@ -208,10 +212,13 @@ void unregister_server_types() {
 }
 
 void register_server_singletons() {
+
 	Engine::get_singleton()->add_singleton(Engine::Singleton("VisualServer", VisualServer::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("AudioServer", AudioServer::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PhysicsServer", PhysicsServer::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("Physics2DServer", Physics2DServer::get_singleton()));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("NavigationServer", NavigationServer::get_singleton_mut()));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("Navigation2DServer", Navigation2DServer::get_singleton_mut()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("ARVRServer", ARVRServer::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("CameraServer", CameraServer::get_singleton()));
 }

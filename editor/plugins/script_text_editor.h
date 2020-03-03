@@ -133,6 +133,7 @@ class ScriptTextEditor : public ScriptEditorBase {
 		SEARCH_LOCATE_FUNCTION,
 		SEARCH_GOTO_LINE,
 		SEARCH_IN_FILES,
+		REPLACE_IN_FILES,
 		BOOKMARK_TOGGLE,
 		BOOKMARK_GOTO_NEXT,
 		BOOKMARK_GOTO_PREV,
@@ -199,7 +200,7 @@ public:
 	virtual Vector<String> get_functions();
 	virtual void reload_text();
 	virtual String get_name();
-	virtual Ref<Texture> get_icon();
+	virtual Ref<Texture2D> get_icon();
 	virtual bool is_unsaved();
 	virtual Variant get_edit_state();
 	virtual void set_edit_state(const Variant &p_state);
@@ -219,7 +220,7 @@ public:
 	virtual void reload(bool p_soft);
 	virtual void get_breakpoints(List<int> *p_breakpoints);
 
-	virtual void add_callback(const String &p_function, PoolStringArray p_args);
+	virtual void add_callback(const String &p_function, PackedStringArray p_args);
 	virtual void update_settings();
 
 	virtual bool show_members_overview();

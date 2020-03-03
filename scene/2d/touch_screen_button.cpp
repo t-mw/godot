@@ -34,24 +34,24 @@
 #include "core/os/input.h"
 #include "core/os/os.h"
 
-void TouchScreenButton::set_texture(const Ref<Texture> &p_texture) {
+void TouchScreenButton::set_texture(const Ref<Texture2D> &p_texture) {
 
 	texture = p_texture;
 	update();
 }
 
-Ref<Texture> TouchScreenButton::get_texture() const {
+Ref<Texture2D> TouchScreenButton::get_texture() const {
 
 	return texture;
 }
 
-void TouchScreenButton::set_texture_pressed(const Ref<Texture> &p_texture_pressed) {
+void TouchScreenButton::set_texture_pressed(const Ref<Texture2D> &p_texture_pressed) {
 
 	texture_pressed = p_texture_pressed;
 	update();
 }
 
-Ref<Texture> TouchScreenButton::get_texture_pressed() const {
+Ref<Texture2D> TouchScreenButton::get_texture_pressed() const {
 
 	return texture_pressed;
 }
@@ -69,12 +69,12 @@ Ref<BitMap> TouchScreenButton::get_bitmask() const {
 void TouchScreenButton::set_shape(const Ref<Shape2D> &p_shape) {
 
 	if (shape.is_valid())
-		shape->disconnect("changed", this, "update");
+		shape->disconnect("changed", callable_mp((CanvasItem *)this, &CanvasItem::update));
 
 	shape = p_shape;
 
 	if (shape.is_valid())
-		shape->connect("changed", this, "update");
+		shape->connect("changed", callable_mp((CanvasItem *)this, &CanvasItem::update));
 
 	update();
 }
@@ -397,14 +397,14 @@ void TouchScreenButton::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("_input"), &TouchScreenButton::_input);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal", PROPERTY_HINT_RESOURCE_TYPE, "Texture"), "set_texture", "get_texture");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "pressed", PROPERTY_HINT_RESOURCE_TYPE, "Texture"), "set_texture_pressed", "get_texture_pressed");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"), "set_texture", "get_texture");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "pressed", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"), "set_texture_pressed", "get_texture_pressed");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "bitmask", PROPERTY_HINT_RESOURCE_TYPE, "BitMap"), "set_bitmask", "get_bitmask");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "shape", PROPERTY_HINT_RESOURCE_TYPE, "Shape2D"), "set_shape", "get_shape");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shape_centered"), "set_shape_centered", "is_shape_centered");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shape_visible"), "set_shape_visible", "is_shape_visible");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "passby_press"), "set_passby_press", "is_passby_press_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "action"), "set_action", "get_action");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "action"), "set_action", "get_action");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "visibility_mode", PROPERTY_HINT_ENUM, "Always,TouchScreen Only"), "set_visibility_mode", "get_visibility_mode");
 
 	ADD_SIGNAL(MethodInfo("pressed"));

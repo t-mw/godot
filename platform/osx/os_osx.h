@@ -40,11 +40,19 @@
 #include "drivers/unix/os_unix.h"
 #include "joypad_osx.h"
 #include "main/input_default.h"
-#include "power_osx.h"
 #include "servers/audio_server.h"
 #include "servers/visual/rasterizer.h"
 #include "servers/visual/visual_server_wrap_mt.h"
 #include "servers/visual_server.h"
+
+#if defined(OPENGL_ENABLED)
+#include "context_gl_osx.h"
+#endif
+
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_device_vulkan.h"
+#include "platform/osx/vulkan_context_osx.h"
+#endif
 
 #include <AppKit/AppKit.h>
 #include <AppKit/NSCursor.h>
@@ -61,7 +69,8 @@ public:
 		bool pressed;
 		bool echo;
 		bool raw;
-		uint32_t scancode;
+		uint32_t keycode;
+		uint32_t physical_keycode;
 		uint32_t unicode;
 	};
 
@@ -69,8 +78,6 @@ public:
 	int key_event_pos;
 
 	bool force_quit;
-	//  rasterizer seems to no longer be given to visual server, its using GLES3 directly?
-	//Rasterizer *rasterizer;
 	VisualServer *visual_server;
 
 	List<String> args;
@@ -93,7 +100,6 @@ public:
 	void process_events();
 	void process_key_events();
 
-	void *framework;
 	//          pthread_key_t   current;
 	bool mouse_grab;
 	Point2 mouse_pos;
@@ -104,8 +110,15 @@ public:
 	id window_view;
 	id autoreleasePool;
 	id cursor;
-	NSOpenGLPixelFormat *pixelFormat;
-	NSOpenGLContext *context;
+
+#if defined(OPENGL_ENABLED)
+	ContextGL_OSX *context_gles2;
+#endif
+
+#if defined(VULKAN_ENABLED)
+	VulkanContextOSX *context_vulkan;
+	RenderingDeviceVulkan *rendering_device_vulkan;
+#endif
 
 	bool layered_window;
 
@@ -133,8 +146,6 @@ public:
 
 	Size2 min_size;
 	Size2 max_size;
-
-	PowerOSX *power_manager;
 
 	CrashHandler crash_handler;
 
@@ -290,10 +301,6 @@ public:
 	virtual String get_ime_text() const;
 
 	virtual String get_unique_id() const;
-
-	virtual OS::PowerState get_power_state();
-	virtual int get_power_seconds_left();
-	virtual int get_power_percent_left();
 
 	virtual bool _check_internal_feature_support(const String &p_feature);
 

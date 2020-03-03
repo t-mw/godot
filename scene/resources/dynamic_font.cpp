@@ -28,8 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifdef FREETYPE_ENABLED
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_FREETYPE_ENABLED
+
 #include "dynamic_font.h"
+
 #include "core/os/file_access.h"
 #include "core/os/os.h"
 
@@ -219,11 +222,6 @@ Error DynamicFontAtSize::_load() {
 	ascent = (face->size->metrics.ascender / 64.0) / oversampling * scale_color_font;
 	descent = (-face->size->metrics.descender / 64.0) / oversampling * scale_color_font;
 	linegap = 0;
-	texture_flags = 0;
-	if (id.mipmaps)
-		texture_flags |= Texture::FLAG_MIPMAPS;
-	if (id.filter)
-		texture_flags |= Texture::FLAG_FILTER;
 
 	valid = true;
 	return OK;
@@ -296,16 +294,6 @@ Size2 DynamicFontAtSize::get_char_size(CharType p_char, CharType p_next, const V
 	return ret;
 }
 
-void DynamicFontAtSize::set_texture_flags(uint32_t p_flags) {
-
-	texture_flags = p_flags;
-	for (int i = 0; i < textures.size(); i++) {
-		Ref<ImageTexture> &tex = textures.write[i].texture;
-		if (!tex.is_null())
-			tex->set_flags(p_flags);
-	}
-}
-
 float DynamicFontAtSize::draw_char(RID p_canvas_item, const Point2 &p_pos, CharType p_char, CharType p_next, const Color &p_modulate, const Vector<Ref<DynamicFontAtSize> > &p_fallbacks, bool p_advance_only, bool p_outline) const {
 
 	if (!valid)
@@ -348,7 +336,7 @@ float DynamicFontAtSize::draw_char(RID p_canvas_item, const Point2 &p_pos, CharT
 				modulate.r = modulate.g = modulate.b = 1.0;
 			}
 			RID texture = font->textures[ch->texture_idx].texture->get_rid();
-			VisualServer::get_singleton()->canvas_item_add_texture_rect_region(p_canvas_item, Rect2(cpos, ch->rect.size), texture, ch->rect_uv, modulate, false, RID(), false);
+			VisualServer::get_singleton()->canvas_item_add_texture_rect_region(p_canvas_item, Rect2(cpos, ch->rect.size), texture, ch->rect_uv, modulate, false, RID(), RID(), Color(1, 1, 1, 1), false);
 		}
 
 		advance = ch->advance;
@@ -454,7 +442,7 @@ DynamicFontAtSize::TexturePosition DynamicFontAtSize::_find_texture_pos_for_glyp
 
 		{
 			//zero texture
-			PoolVector<uint8_t>::Write w = tex.imgdata.write();
+			uint8_t *w = tex.imgdata.ptrw();
 			ERR_FAIL_COND_V(texsize * texsize * p_color_size > tex.imgdata.size(), ret);
 			for (int i = 0; i < texsize * texsize * p_color_size; i++) {
 				w[i] = 0;
@@ -492,7 +480,7 @@ DynamicFontAtSize::Character DynamicFontAtSize::_bitmap_to_character(FT_Bitmap b
 	CharTexture &tex = textures.write[tex_pos.index];
 
 	{
-		PoolVector<uint8_t>::Write wr = tex.imgdata.write();
+		uint8_t *wr = tex.imgdata.ptrw();
 
 		for (int i = 0; i < h; i++) {
 			for (int j = 0; j < w; j++) {
@@ -533,9 +521,9 @@ DynamicFontAtSize::Character DynamicFontAtSize::_bitmap_to_character(FT_Bitmap b
 
 		if (tex.texture.is_null()) {
 			tex.texture.instance();
-			tex.texture->create_from_image(img, Texture::FLAG_VIDEO_SURFACE | texture_flags);
+			tex.texture->create_from_image(img);
 		} else {
-			tex.texture->set_data(img); //update
+			tex.texture->update(img); //update
 		}
 	}
 
@@ -656,7 +644,6 @@ DynamicFontAtSize::DynamicFontAtSize() {
 	ascent = 1;
 	descent = 1;
 	linegap = 1;
-	texture_flags = 0;
 	oversampling = font_oversampling;
 	scale_color_font = 1;
 }
@@ -753,34 +740,6 @@ void DynamicFont::set_outline_color(Color p_color) {
 
 Color DynamicFont::get_outline_color() const {
 	return outline_color;
-}
-
-bool DynamicFont::get_use_mipmaps() const {
-
-	return cache_id.mipmaps;
-}
-
-void DynamicFont::set_use_mipmaps(bool p_enable) {
-
-	if (cache_id.mipmaps == p_enable)
-		return;
-	cache_id.mipmaps = p_enable;
-	outline_cache_id.mipmaps = p_enable;
-	_reload_cache();
-}
-
-bool DynamicFont::get_use_filter() const {
-
-	return cache_id.filter;
-}
-
-void DynamicFont::set_use_filter(bool p_enable) {
-
-	if (cache_id.filter == p_enable)
-		return;
-	cache_id.filter = p_enable;
-	outline_cache_id.filter = p_enable;
-	_reload_cache();
 }
 
 bool DynamicFontData::is_antialiased() const {
@@ -1004,10 +963,6 @@ void DynamicFont::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_outline_color", "color"), &DynamicFont::set_outline_color);
 	ClassDB::bind_method(D_METHOD("get_outline_color"), &DynamicFont::get_outline_color);
 
-	ClassDB::bind_method(D_METHOD("set_use_mipmaps", "enable"), &DynamicFont::set_use_mipmaps);
-	ClassDB::bind_method(D_METHOD("get_use_mipmaps"), &DynamicFont::get_use_mipmaps);
-	ClassDB::bind_method(D_METHOD("set_use_filter", "enable"), &DynamicFont::set_use_filter);
-	ClassDB::bind_method(D_METHOD("get_use_filter"), &DynamicFont::get_use_filter);
 	ClassDB::bind_method(D_METHOD("set_spacing", "type", "value"), &DynamicFont::set_spacing);
 	ClassDB::bind_method(D_METHOD("get_spacing", "type"), &DynamicFont::get_spacing);
 
@@ -1021,8 +976,6 @@ void DynamicFont::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "size", PROPERTY_HINT_RANGE, "1,1024,1"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "outline_size", PROPERTY_HINT_RANGE, "0,1024,1"), "set_outline_size", "get_outline_size");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "outline_color"), "set_outline_color", "get_outline_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_mipmaps"), "set_use_mipmaps", "get_use_mipmaps");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_filter"), "set_use_filter", "get_use_filter");
 	ADD_GROUP("Extra Spacing", "extra_spacing");
 	ADD_PROPERTYI(PropertyInfo(Variant::INT, "extra_spacing_top"), "set_spacing", "get_spacing", SPACING_TOP);
 	ADD_PROPERTYI(PropertyInfo(Variant::INT, "extra_spacing_bottom"), "set_spacing", "get_spacing", SPACING_BOTTOM);
@@ -1037,7 +990,7 @@ void DynamicFont::_bind_methods() {
 	BIND_ENUM_CONSTANT(SPACING_SPACE);
 }
 
-Mutex *DynamicFont::dynamic_font_mutex = NULL;
+Mutex DynamicFont::dynamic_font_mutex;
 
 SelfList<DynamicFont>::List *DynamicFont::dynamic_fonts = NULL;
 
@@ -1051,29 +1004,21 @@ DynamicFont::DynamicFont() :
 	spacing_char = 0;
 	spacing_space = 0;
 	outline_color = Color(1, 1, 1);
-	if (dynamic_font_mutex) {
-		dynamic_font_mutex->lock();
-		dynamic_fonts->add(&font_list);
-		dynamic_font_mutex->unlock();
-	}
+
+	MutexLock lock(dynamic_font_mutex);
+	dynamic_fonts->add(&font_list);
 }
 
 DynamicFont::~DynamicFont() {
-	if (dynamic_font_mutex) {
-		dynamic_font_mutex->lock();
-		dynamic_fonts->remove(&font_list);
-		dynamic_font_mutex->unlock();
-	}
+	MutexLock lock(dynamic_font_mutex);
+	dynamic_fonts->remove(&font_list);
 }
 
 void DynamicFont::initialize_dynamic_fonts() {
 	dynamic_fonts = memnew(SelfList<DynamicFont>::List());
-	dynamic_font_mutex = Mutex::create();
 }
 
 void DynamicFont::finish_dynamic_fonts() {
-	memdelete(dynamic_font_mutex);
-	dynamic_font_mutex = NULL;
 	memdelete(dynamic_fonts);
 	dynamic_fonts = NULL;
 }
@@ -1081,38 +1026,35 @@ void DynamicFont::finish_dynamic_fonts() {
 void DynamicFont::update_oversampling() {
 
 	Vector<Ref<DynamicFont> > changed;
+	{
+		MutexLock lock(dynamic_font_mutex);
 
-	if (dynamic_font_mutex)
-		dynamic_font_mutex->lock();
+		SelfList<DynamicFont> *E = dynamic_fonts->first();
+		while (E) {
 
-	SelfList<DynamicFont> *E = dynamic_fonts->first();
-	while (E) {
+			if (E->self()->data_at_size.is_valid()) {
+				E->self()->data_at_size->update_oversampling();
 
-		if (E->self()->data_at_size.is_valid()) {
-			E->self()->data_at_size->update_oversampling();
+				if (E->self()->outline_data_at_size.is_valid()) {
+					E->self()->outline_data_at_size->update_oversampling();
+				}
 
-			if (E->self()->outline_data_at_size.is_valid()) {
-				E->self()->outline_data_at_size->update_oversampling();
-			}
+				for (int i = 0; i < E->self()->fallback_data_at_size.size(); i++) {
+					if (E->self()->fallback_data_at_size[i].is_valid()) {
+						E->self()->fallback_data_at_size.write[i]->update_oversampling();
 
-			for (int i = 0; i < E->self()->fallback_data_at_size.size(); i++) {
-				if (E->self()->fallback_data_at_size[i].is_valid()) {
-					E->self()->fallback_data_at_size.write[i]->update_oversampling();
-
-					if (E->self()->has_outline() && E->self()->fallback_outline_data_at_size[i].is_valid()) {
-						E->self()->fallback_outline_data_at_size.write[i]->update_oversampling();
+						if (E->self()->has_outline() && E->self()->fallback_outline_data_at_size[i].is_valid()) {
+							E->self()->fallback_outline_data_at_size.write[i]->update_oversampling();
+						}
 					}
 				}
+
+				changed.push_back(Ref<DynamicFont>(E->self()));
 			}
 
-			changed.push_back(Ref<DynamicFont>(E->self()));
+			E = E->next();
 		}
-
-		E = E->next();
 	}
-
-	if (dynamic_font_mutex)
-		dynamic_font_mutex->unlock();
 
 	for (int i = 0; i < changed.size(); i++) {
 		changed.write[i]->emit_changed();
@@ -1121,7 +1063,7 @@ void DynamicFont::update_oversampling() {
 
 /////////////////////////
 
-RES ResourceFormatLoaderDynamicFont::load(const String &p_path, const String &p_original_path, Error *r_error) {
+RES ResourceFormatLoaderDynamicFont::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress) {
 
 	if (r_error)
 		*r_error = ERR_FILE_CANT_OPEN;

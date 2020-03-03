@@ -31,9 +31,11 @@
 #include "csharp_script.h"
 
 #include <mono/metadata/threads.h>
+#include <stdint.h>
 
 #include "core/io/json.h"
 #include "core/os/file_access.h"
+#include "core/os/mutex.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "core/project_settings.h"
@@ -57,7 +59,6 @@
 #include "mono_gd/gd_mono_utils.h"
 #include "signal_awaiter_utils.h"
 #include "utils/macros.h"
-#include "utils/mutex_utils.h"
 #include "utils/string_utils.h"
 #include "utils/thread_local.h"
 
@@ -161,13 +162,13 @@ void CSharpLanguage::finish() {
 
 #ifdef DEBUG_ENABLED
 	for (Map<ObjectID, int>::Element *E = unsafe_object_references.front(); E; E = E->next()) {
-		const ObjectID &id = E->get();
+		const ObjectID &id = E->key();
 		Object *obj = ObjectDB::get_instance(id);
 
 		if (obj) {
-			ERR_PRINTS("Leaked unsafe reference to object: " + obj->get_class() + ":" + itos(id));
+			ERR_PRINT("Leaked unsafe reference to object: " + obj->to_string());
 		} else {
-			ERR_PRINTS("Leaked unsafe reference to deleted object: " + itos(id));
+			ERR_PRINT("Leaked unsafe reference to deleted object: " + itos(id));
 		}
 	}
 #endif
@@ -410,7 +411,7 @@ static String variant_type_to_managed_name(const String &p_var_type_name) {
 	if (p_var_type_name == Variant::get_type_name(Variant::OBJECT))
 		return "Godot.Object";
 
-	if (p_var_type_name == Variant::get_type_name(Variant::REAL)) {
+	if (p_var_type_name == Variant::get_type_name(Variant::FLOAT)) {
 #ifdef REAL_T_IS_DOUBLE
 		return "double";
 #else
@@ -427,24 +428,24 @@ static String variant_type_to_managed_name(const String &p_var_type_name) {
 	if (p_var_type_name == Variant::get_type_name(Variant::ARRAY))
 		return "Collections.Array";
 
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_BYTE_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_BYTE_ARRAY))
 		return "byte[]";
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_INT_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_INT32_ARRAY))
 		return "int[]";
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_REAL_ARRAY)) {
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_FLOAT32_ARRAY)) {
 #ifdef REAL_T_IS_DOUBLE
 		return "double[]";
 #else
 		return "float[]";
 #endif
 	}
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_STRING_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_STRING_ARRAY))
 		return "string[]";
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_VECTOR2_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_VECTOR2_ARRAY))
 		return "Vector2[]";
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_VECTOR3_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_VECTOR3_ARRAY))
 		return "Vector3[]";
-	if (p_var_type_name == Variant::get_type_name(Variant::POOL_COLOR_ARRAY))
+	if (p_var_type_name == Variant::get_type_name(Variant::PACKED_COLOR_ARRAY))
 		return "Color[]";
 
 	Variant::Type var_types[] = {
@@ -472,7 +473,7 @@ static String variant_type_to_managed_name(const String &p_var_type_name) {
 	return "object";
 }
 
-String CSharpLanguage::make_function(const String &, const String &p_name, const PoolStringArray &p_args) const {
+String CSharpLanguage::make_function(const String &, const String &p_name, const PackedStringArray &p_args) const {
 	// FIXME
 	// - Due to Godot's API limitation this just appends the function to the end of the file
 	// - Use fully qualified name if there is ambiguity
@@ -490,7 +491,7 @@ String CSharpLanguage::make_function(const String &, const String &p_name, const
 	return s;
 }
 #else
-String CSharpLanguage::make_function(const String &, const String &, const PoolStringArray &) const {
+String CSharpLanguage::make_function(const String &, const String &, const PackedStringArray &) const {
 	return String();
 }
 #endif
@@ -632,7 +633,7 @@ Vector<ScriptLanguage::StackInfo> CSharpLanguage::stack_trace_get_info(MonoObjec
 
 void CSharpLanguage::post_unsafe_reference(Object *p_obj) {
 #ifdef DEBUG_ENABLED
-	SCOPED_MUTEX_LOCK(unsafe_object_references_lock);
+	MutexLock lock(unsafe_object_references_lock);
 	ObjectID id = p_obj->get_instance_id();
 	unsafe_object_references[id]++;
 #endif
@@ -640,7 +641,7 @@ void CSharpLanguage::post_unsafe_reference(Object *p_obj) {
 
 void CSharpLanguage::pre_unsafe_unreference(Object *p_obj) {
 #ifdef DEBUG_ENABLED
-	SCOPED_MUTEX_LOCK(unsafe_object_references_lock);
+	MutexLock lock(unsafe_object_references_lock);
 	ObjectID id = p_obj->get_instance_id();
 	Map<ObjectID, int>::Element *elem = unsafe_object_references.find(id);
 	ERR_FAIL_NULL(elem);
@@ -763,7 +764,7 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 	List<Ref<CSharpScript> > scripts;
 
 	{
-		SCOPED_MUTEX_LOCK(script_instances_mutex);
+		MutexLock lock(script_instances_mutex);
 
 		for (SelfList<CSharpScript> *elem = script_list.first(); elem; elem = elem->next()) {
 			// Cast to CSharpScript to avoid being erased by accident
@@ -853,7 +854,7 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 
 		while (script->instances.front()) {
 			Object *obj = script->instances.front()->get();
-			obj->set_script(RefPtr()); // Remove script and existing script instances (placeholder are not removed before domain reload)
+			obj->set_script(REF()); // Remove script and existing script instances (placeholder are not removed before domain reload)
 		}
 
 		script->_clear();
@@ -876,7 +877,7 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 
 				// Use a placeholder for now to avoid losing the state when saving a scene
 
-				obj->set_script(scr.get_ref_ptr());
+				obj->set_script(scr);
 
 				PlaceHolderScriptInstance *placeholder = scr->placeholder_instance_create(obj);
 				obj->set_script_instance(placeholder);
@@ -1002,7 +1003,7 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 				CRASH_COND(si != NULL);
 #endif
 				// Re-create script instance
-				obj->set_script(script.get_ref_ptr()); // will create the script instance as well
+				obj->set_script(script); // will create the script instance as well
 			}
 		}
 
@@ -1080,7 +1081,7 @@ void CSharpLanguage::_load_scripts_metadata() {
 		int err_line;
 		Error json_err = JSON::parse(old_json, old_dict_var, err_str, err_line);
 		if (json_err != OK) {
-			ERR_PRINTS("Failed to parse metadata file: '" + err_str + "' (" + String::num_int64(err_line) + ").");
+			ERR_PRINT("Failed to parse metadata file: '" + err_str + "' (" + String::num_int64(err_line) + ").");
 			return;
 		}
 
@@ -1203,7 +1204,7 @@ void CSharpLanguage::set_language_index(int p_idx) {
 void CSharpLanguage::release_script_gchandle(Ref<MonoGCHandle> &p_gchandle) {
 
 	if (!p_gchandle->is_released()) { // Do not lock unnecessarily
-		SCOPED_MUTEX_LOCK(get_singleton()->script_gchandle_release_mutex);
+		MutexLock lock(get_singleton()->script_gchandle_release_mutex);
 		p_gchandle->release();
 	}
 }
@@ -1213,7 +1214,7 @@ void CSharpLanguage::release_script_gchandle(MonoObject *p_expected_obj, Ref<Mon
 	uint32_t pinned_gchandle = MonoGCHandle::new_strong_handle_pinned(p_expected_obj); // We might lock after this, so pin it
 
 	if (!p_gchandle->is_released()) { // Do not lock unnecessarily
-		SCOPED_MUTEX_LOCK(get_singleton()->script_gchandle_release_mutex);
+		MutexLock lock(get_singleton()->script_gchandle_release_mutex);
 
 		MonoObject *target = p_gchandle->get_target();
 
@@ -1238,24 +1239,6 @@ CSharpLanguage::CSharpLanguage() {
 
 	gdmono = NULL;
 
-#ifdef NO_THREADS
-	script_instances_mutex = NULL;
-	script_gchandle_release_mutex = NULL;
-	language_bind_mutex = NULL;
-#else
-	script_instances_mutex = Mutex::create();
-	script_gchandle_release_mutex = Mutex::create();
-	language_bind_mutex = Mutex::create();
-#endif
-
-#ifdef DEBUG_ENABLED
-#ifdef NO_THREADS
-	unsafe_object_references_lock = NULL;
-#else
-	unsafe_object_references_lock = Mutex::create();
-#endif
-#endif
-
 	lang_idx = -1;
 
 	scripts_metadata_invalidated = true;
@@ -1268,29 +1251,6 @@ CSharpLanguage::CSharpLanguage() {
 CSharpLanguage::~CSharpLanguage() {
 
 	finish();
-
-	if (script_instances_mutex) {
-		memdelete(script_instances_mutex);
-		script_instances_mutex = NULL;
-	}
-
-	if (language_bind_mutex) {
-		memdelete(language_bind_mutex);
-		language_bind_mutex = NULL;
-	}
-
-	if (script_gchandle_release_mutex) {
-		memdelete(script_gchandle_release_mutex);
-		script_gchandle_release_mutex = NULL;
-	}
-
-#ifdef DEBUG_ENABLED
-	if (unsafe_object_references_lock) {
-		memdelete(unsafe_object_references_lock);
-		unsafe_object_references_lock = NULL;
-	}
-#endif
-
 	singleton = NULL;
 }
 
@@ -1345,7 +1305,7 @@ bool CSharpLanguage::setup_csharp_script_binding(CSharpScriptBinding &r_script_b
 
 void *CSharpLanguage::alloc_instance_binding_data(Object *p_object) {
 
-	SCOPED_MUTEX_LOCK(language_bind_mutex);
+	MutexLock lock(language_bind_mutex);
 
 	Map<Object *, CSharpScriptBinding>::Element *match = script_bindings.find(p_object);
 	if (match)
@@ -1380,7 +1340,7 @@ void CSharpLanguage::free_instance_binding_data(void *p_data) {
 	GD_MONO_ASSERT_THREAD_ATTACHED;
 
 	{
-		SCOPED_MUTEX_LOCK(language_bind_mutex);
+		MutexLock lock(language_bind_mutex);
 
 		Map<Object *, CSharpScriptBinding>::Element *data = (Map<Object *, CSharpScriptBinding>::Element *)p_data;
 
@@ -1719,17 +1679,16 @@ bool CSharpInstance::has_method(const StringName &p_method) const {
 	return false;
 }
 
-Variant CSharpInstance::call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error) {
+Variant CSharpInstance::call(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 
-	if (!script.is_valid())
-		ERR_FAIL_V(Variant());
+	ERR_FAIL_COND_V(!script.is_valid(), Variant());
 
 	GD_MONO_SCOPE_THREAD_ATTACH;
 
 	MonoObject *mono_object = get_mono_object();
 
 	if (!mono_object) {
-		r_error.error = Variant::CallError::CALL_ERROR_INSTANCE_IS_NULL;
+		r_error.error = Callable::CallError::CALL_ERROR_INSTANCE_IS_NULL;
 		ERR_FAIL_V(Variant());
 	}
 
@@ -1741,7 +1700,7 @@ Variant CSharpInstance::call(const StringName &p_method, const Variant **p_args,
 		if (method) {
 			MonoObject *return_value = method->invoke(mono_object, p_args);
 
-			r_error.error = Variant::CallError::CALL_OK;
+			r_error.error = Callable::CallError::CALL_OK;
 
 			if (return_value) {
 				return GDMonoMarshal::mono_object_to_variant(return_value);
@@ -1753,7 +1712,7 @@ Variant CSharpInstance::call(const StringName &p_method, const Variant **p_args,
 		top = top->get_parent_class();
 	}
 
-	r_error.error = Variant::CallError::CALL_ERROR_INVALID_METHOD;
+	r_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
 
 	return Variant();
 }
@@ -1980,67 +1939,44 @@ bool CSharpInstance::refcount_decremented() {
 	return ref_dying;
 }
 
-MultiplayerAPI::RPCMode CSharpInstance::_member_get_rpc_mode(IMonoClassMember *p_member) const {
+Vector<ScriptNetData> CSharpInstance::get_rpc_methods() const {
+	return script->get_rpc_methods();
+}
 
-	if (p_member->has_attribute(CACHED_CLASS(RemoteAttribute)))
-		return MultiplayerAPI::RPC_MODE_REMOTE;
-	if (p_member->has_attribute(CACHED_CLASS(MasterAttribute)))
-		return MultiplayerAPI::RPC_MODE_MASTER;
-	if (p_member->has_attribute(CACHED_CLASS(PuppetAttribute)))
-		return MultiplayerAPI::RPC_MODE_PUPPET;
-	if (p_member->has_attribute(CACHED_CLASS(SlaveAttribute)))
-		return MultiplayerAPI::RPC_MODE_PUPPET;
-	if (p_member->has_attribute(CACHED_CLASS(RemoteSyncAttribute)))
-		return MultiplayerAPI::RPC_MODE_REMOTESYNC;
-	if (p_member->has_attribute(CACHED_CLASS(SyncAttribute)))
-		return MultiplayerAPI::RPC_MODE_REMOTESYNC;
-	if (p_member->has_attribute(CACHED_CLASS(MasterSyncAttribute)))
-		return MultiplayerAPI::RPC_MODE_MASTERSYNC;
-	if (p_member->has_attribute(CACHED_CLASS(PuppetSyncAttribute)))
-		return MultiplayerAPI::RPC_MODE_PUPPETSYNC;
+uint16_t CSharpInstance::get_rpc_method_id(const StringName &p_method) const {
+	return script->get_rpc_method_id(p_method);
+}
 
-	return MultiplayerAPI::RPC_MODE_DISABLED;
+StringName CSharpInstance::get_rpc_method(const uint16_t p_rpc_method_id) const {
+	return script->get_rpc_method(p_rpc_method_id);
+}
+
+MultiplayerAPI::RPCMode CSharpInstance::get_rpc_mode_by_id(const uint16_t p_rpc_method_id) const {
+	return script->get_rpc_mode_by_id(p_rpc_method_id);
 }
 
 MultiplayerAPI::RPCMode CSharpInstance::get_rpc_mode(const StringName &p_method) const {
+	return script->get_rpc_mode(p_method);
+}
 
-	GD_MONO_SCOPE_THREAD_ATTACH;
+Vector<ScriptNetData> CSharpInstance::get_rset_properties() const {
+	return script->get_rset_properties();
+}
 
-	GDMonoClass *top = script->script_class;
+uint16_t CSharpInstance::get_rset_property_id(const StringName &p_variable) const {
+	return script->get_rset_property_id(p_variable);
+}
 
-	while (top && top != script->native) {
-		GDMonoMethod *method = top->get_fetched_method_unknown_params(p_method);
+StringName CSharpInstance::get_rset_property(const uint16_t p_rset_member_id) const {
+	return script->get_rset_property(p_rset_member_id);
+}
 
-		if (method && !method->is_static())
-			return _member_get_rpc_mode(method);
-
-		top = top->get_parent_class();
-	}
-
-	return MultiplayerAPI::RPC_MODE_DISABLED;
+MultiplayerAPI::RPCMode CSharpInstance::get_rset_mode_by_id(const uint16_t p_rset_member_id) const {
+	return script->get_rset_mode_by_id(p_rset_member_id);
 }
 
 MultiplayerAPI::RPCMode CSharpInstance::get_rset_mode(const StringName &p_variable) const {
-
-	GD_MONO_SCOPE_THREAD_ATTACH;
-
-	GDMonoClass *top = script->script_class;
-
-	while (top && top != script->native) {
-		GDMonoField *field = top->get_field(p_variable);
-
-		if (field && !field->is_static())
-			return _member_get_rpc_mode(field);
-
-		GDMonoProperty *property = top->get_property(p_variable);
-
-		if (property && !property->is_static())
-			return _member_get_rpc_mode(property);
-
-		top = top->get_parent_class();
-	}
-
-	return MultiplayerAPI::RPC_MODE_DISABLED;
+	return script->get_rset_mode(p_variable);
 }
 
 void CSharpInstance::notification(int p_notification) {
@@ -2210,7 +2146,7 @@ CSharpInstance::~CSharpInstance() {
 		CSharpScriptBinding &script_binding = ((Map<Object *, CSharpScriptBinding>::Element *)data)->get();
 
 		if (!script_binding.inited) {
-			SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->get_language_bind_mutex());
+			MutexLock lock(CSharpLanguage::get_singleton()->get_language_bind_mutex());
 
 			if (!script_binding.inited) { // Other thread may have set it up
 				// Already had a binding that needs to be setup
@@ -2226,7 +2162,7 @@ CSharpInstance::~CSharpInstance() {
 	}
 
 	if (script.is_valid() && owner) {
-		SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+		MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 
 #ifdef DEBUG_ENABLED
 		// CSharpInstance must not be created unless it's going to be added to the list for sure
@@ -2444,7 +2380,7 @@ bool CSharpScript::_update_exports() {
 		if (tmp_native && !base_ref) {
 			Node *node = Object::cast_to<Node>(tmp_native);
 			if (node && node->is_inside_tree()) {
-				ERR_PRINTS("Temporary instance was added to the scene tree.");
+				ERR_PRINT("Temporary instance was added to the scene tree.");
 			} else {
 				memdelete(tmp_native);
 			}
@@ -2522,7 +2458,7 @@ bool CSharpScript::_get_signal(GDMonoClass *p_class, GDMonoClass *p_delegate, Ve
 					arg.type = GDMonoMarshal::managed_to_variant_type(types[i]);
 
 					if (arg.type == Variant::NIL) {
-						ERR_PRINTS("Unknown type of signal parameter: '" + arg.name + "' in '" + p_class->get_full_name() + "'.");
+						ERR_PRINT("Unknown type of signal parameter: '" + arg.name + "' in '" + p_class->get_full_name() + "'.");
 						return false;
 					}
 
@@ -2552,7 +2488,7 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 
 	if (p_member->is_static()) {
 		if (p_member->has_attribute(CACHED_CLASS(ExportAttribute)))
-			ERR_PRINTS("Cannot export member because it is static: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+			ERR_PRINT("Cannot export member because it is static: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 		return false;
 	}
 
@@ -2575,12 +2511,12 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 		GDMonoProperty *property = static_cast<GDMonoProperty *>(p_member);
 		if (!property->has_getter()) {
 			if (exported)
-				ERR_PRINTS("Read-only property cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+				ERR_PRINT("Read-only property cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 			return false;
 		}
 		if (!property->has_setter()) {
 			if (exported)
-				ERR_PRINTS("Write-only property (without getter) cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+				ERR_PRINT("Write-only property (without getter) cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 			return false;
 		}
 	}
@@ -2599,7 +2535,7 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 	String hint_string;
 
 	if (variant_type == Variant::NIL) {
-		ERR_PRINTS("Unknown exported member type: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+		ERR_PRINT("Unknown exported member type: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 		return false;
 	}
 
@@ -2727,11 +2663,11 @@ void CSharpScript::_clear() {
 	script_class = NULL;
 }
 
-Variant CSharpScript::call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error) {
+Variant CSharpScript::call(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 
 	if (unlikely(GDMono::get_singleton() == NULL)) {
 		// Probably not the best error but eh.
-		r_error.error = Variant::CallError::CALL_ERROR_INSTANCE_IS_NULL;
+		r_error.error = Callable::CallError::CALL_ERROR_INSTANCE_IS_NULL;
 		return Variant();
 	}
 
@@ -2891,7 +2827,7 @@ bool CSharpScript::can_instance() const {
 						"Compile",
 						ProjectSettings::get_singleton()->globalize_path(get_path()));
 			} else {
-				ERR_PRINTS("C# project could not be created; cannot add file: '" + get_path() + "'.");
+				ERR_PRINT("C# project could not be created; cannot add file: '" + get_path() + "'.");
 			}
 		}
 	}
@@ -2927,7 +2863,7 @@ StringName CSharpScript::get_instance_base_type() const {
 		return StringName();
 }
 
-CSharpInstance *CSharpScript::_create_instance(const Variant **p_args, int p_argcount, Object *p_owner, bool p_isref, Variant::CallError &r_error) {
+CSharpInstance *CSharpScript::_create_instance(const Variant **p_args, int p_argcount, Object *p_owner, bool p_isref, Callable::CallError &r_error) {
 
 	GD_MONO_ASSERT_THREAD_ATTACHED;
 
@@ -2991,7 +2927,7 @@ CSharpInstance *CSharpScript::_create_instance(const Variant **p_args, int p_arg
 		CRASH_COND(die == true);
 
 		p_owner->set_script_instance(NULL);
-		r_error.error = Variant::CallError::CALL_ERROR_INSTANCE_IS_NULL;
+		r_error.error = Callable::CallError::CALL_ERROR_INSTANCE_IS_NULL;
 		ERR_FAIL_V_MSG(NULL, "Failed to allocate memory for the object.");
 	}
 
@@ -3002,7 +2938,7 @@ CSharpInstance *CSharpScript::_create_instance(const Variant **p_args, int p_arg
 		instance->_reference_owner_unsafe(); // Here, after assigning the gchandle (for the refcount_incremented callback)
 
 	{
-		SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+		MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 		instances.insert(instance->owner);
 	}
 
@@ -3017,14 +2953,14 @@ CSharpInstance *CSharpScript::_create_instance(const Variant **p_args, int p_arg
 	return instance;
 }
 
-Variant CSharpScript::_new(const Variant **p_args, int p_argcount, Variant::CallError &r_error) {
+Variant CSharpScript::_new(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 
 	if (!valid) {
-		r_error.error = Variant::CallError::CALL_ERROR_INVALID_METHOD;
+		r_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
 		return Variant();
 	}
 
-	r_error.error = Variant::CallError::CALL_OK;
+	r_error.error = Callable::CallError::CALL_OK;
 
 	ERR_FAIL_NULL_V(native, Variant());
 
@@ -3072,7 +3008,7 @@ ScriptInstance *CSharpScript::instance_create(Object *p_this) {
 
 	GD_MONO_SCOPE_THREAD_ATTACH;
 
-	Variant::CallError unchecked_error;
+	Callable::CallError unchecked_error;
 	return _create_instance(NULL, 0, p_this, Object::cast_to<Reference>(p_this) != NULL, unchecked_error);
 }
 
@@ -3090,7 +3026,7 @@ PlaceHolderScriptInstance *CSharpScript::placeholder_instance_create(Object *p_t
 
 bool CSharpScript::instance_has(const Object *p_this) const {
 
-	SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+	MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 	return instances.has((Object *)p_this);
 }
 
@@ -3163,7 +3099,7 @@ Error CSharpScript::reload(bool p_keep_state) {
 
 	bool has_instances;
 	{
-		SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+		MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 		has_instances = instances.size();
 	}
 
@@ -3252,6 +3188,69 @@ Error CSharpScript::reload(bool p_keep_state) {
 			_update_exports();
 		}
 
+		rpc_functions.clear();
+		rpc_variables.clear();
+
+		GDMonoClass *top = script_class;
+		while (top && top != native) {
+			{
+				Vector<GDMonoMethod *> methods = top->get_all_methods();
+				for (int i = 0; i < methods.size(); i++) {
+					if (!methods[i]->is_static()) {
+						MultiplayerAPI::RPCMode mode = _member_get_rpc_mode(methods[i]);
+						if (MultiplayerAPI::RPC_MODE_DISABLED != mode) {
+							ScriptNetData nd;
+							nd.name = methods[i]->get_name();
+							nd.mode = mode;
+							if (-1 == rpc_functions.find(nd)) {
+								rpc_functions.push_back(nd);
+							}
+						}
+					}
+				}
+			}
+
+			{
+				Vector<GDMonoField *> fields = top->get_all_fields();
+				for (int i = 0; i < fields.size(); i++) {
+					if (!fields[i]->is_static()) {
+						MultiplayerAPI::RPCMode mode = _member_get_rpc_mode(fields[i]);
+						if (MultiplayerAPI::RPC_MODE_DISABLED != mode) {
+							ScriptNetData nd;
+							nd.name = fields[i]->get_name();
+							nd.mode = mode;
+							if (-1 == rpc_variables.find(nd)) {
+								rpc_variables.push_back(nd);
+							}
+						}
+					}
+				}
+			}
+
+			{
+				Vector<GDMonoProperty *> properties = top->get_all_properties();
+				for (int i = 0; i < properties.size(); i++) {
+					if (!properties[i]->is_static()) {
+						MultiplayerAPI::RPCMode mode = _member_get_rpc_mode(properties[i]);
+						if (MultiplayerAPI::RPC_MODE_DISABLED != mode) {
+							ScriptNetData nd;
+							nd.name = properties[i]->get_name();
+							nd.mode = mode;
+							if (-1 == rpc_variables.find(nd)) {
+								rpc_variables.push_back(nd);
+							}
+						}
+					}
+				}
+			}
+
+			top = top->get_parent_class();
+		}
+
+		// Sort so we are 100% that they are always the same.
+		rpc_functions.sort_custom<SortNetData>();
+		rpc_variables.sort_custom<SortNetData>();
+
 		return OK;
 	}
 
@@ -3325,6 +3324,78 @@ int CSharpScript::get_member_line(const StringName &p_member) const {
 	return -1;
 }
 
+MultiplayerAPI::RPCMode CSharpScript::_member_get_rpc_mode(IMonoClassMember *p_member) const {
+
+	if (p_member->has_attribute(CACHED_CLASS(RemoteAttribute)))
+		return MultiplayerAPI::RPC_MODE_REMOTE;
+	if (p_member->has_attribute(CACHED_CLASS(MasterAttribute)))
+		return MultiplayerAPI::RPC_MODE_MASTER;
+	if (p_member->has_attribute(CACHED_CLASS(PuppetAttribute)))
+		return MultiplayerAPI::RPC_MODE_PUPPET;
+	if (p_member->has_attribute(CACHED_CLASS(RemoteSyncAttribute)))
+		return MultiplayerAPI::RPC_MODE_REMOTESYNC;
+	if (p_member->has_attribute(CACHED_CLASS(MasterSyncAttribute)))
+		return MultiplayerAPI::RPC_MODE_MASTERSYNC;
+	if (p_member->has_attribute(CACHED_CLASS(PuppetSyncAttribute)))
+		return MultiplayerAPI::RPC_MODE_PUPPETSYNC;
+
+	return MultiplayerAPI::RPC_MODE_DISABLED;
+}
+
+Vector<ScriptNetData> CSharpScript::get_rpc_methods() const {
+	return rpc_functions;
+}
+
+uint16_t CSharpScript::get_rpc_method_id(const StringName &p_method) const {
+	for (int i = 0; i < rpc_functions.size(); i++) {
+		if (rpc_functions[i].name == p_method) {
+			return i;
+		}
+	}
+	return UINT16_MAX;
+}
+
+StringName CSharpScript::get_rpc_method(const uint16_t p_rpc_method_id) const {
+	ERR_FAIL_COND_V(p_rpc_method_id >= rpc_functions.size(), StringName());
+	return rpc_functions[p_rpc_method_id].name;
+}
+
+MultiplayerAPI::RPCMode CSharpScript::get_rpc_mode_by_id(const uint16_t p_rpc_method_id) const {
+	ERR_FAIL_COND_V(p_rpc_method_id >= rpc_functions.size(), MultiplayerAPI::RPC_MODE_DISABLED);
+	return rpc_functions[p_rpc_method_id].mode;
+}
+
+MultiplayerAPI::RPCMode CSharpScript::get_rpc_mode(const StringName &p_method) const {
+	return get_rpc_mode_by_id(get_rpc_method_id(p_method));
+}
+
+Vector<ScriptNetData> CSharpScript::get_rset_properties() const {
+	return rpc_variables;
+}
+
+uint16_t CSharpScript::get_rset_property_id(const StringName &p_variable) const {
+	for (int i = 0; i < rpc_variables.size(); i++) {
+		if (rpc_variables[i].name == p_variable) {
+			return i;
+		}
+	}
+	return UINT16_MAX;
+}
+
+StringName CSharpScript::get_rset_property(const uint16_t p_rset_member_id) const {
+	ERR_FAIL_COND_V(p_rset_member_id >= rpc_variables.size(), StringName());
+	return rpc_variables[p_rset_member_id].name;
+}
+
+MultiplayerAPI::RPCMode CSharpScript::get_rset_mode_by_id(const uint16_t p_rset_member_id) const {
+	ERR_FAIL_COND_V(p_rset_member_id >= rpc_functions.size(), MultiplayerAPI::RPC_MODE_DISABLED);
+	return rpc_functions[p_rset_member_id].mode;
+}
+
+MultiplayerAPI::RPCMode CSharpScript::get_rset_mode(const StringName &p_variable) const {
+	return get_rset_mode_by_id(get_rset_property_id(p_variable));
+}
+
 Error CSharpScript::load_source_code(const String &p_path) {
 
 	Error ferr = read_all_file_utf8(p_path, source);
@@ -3364,7 +3435,7 @@ CSharpScript::CSharpScript() :
 
 #ifdef DEBUG_ENABLED
 	{
-		SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+		MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 		CSharpLanguage::get_singleton()->script_list.add(&this->script_list);
 	}
 #endif
@@ -3373,14 +3444,14 @@ CSharpScript::CSharpScript() :
 CSharpScript::~CSharpScript() {
 
 #ifdef DEBUG_ENABLED
-	SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->script_instances_mutex);
+	MutexLock lock(CSharpLanguage::get_singleton()->script_instances_mutex);
 	CSharpLanguage::get_singleton()->script_list.remove(&this->script_list);
 #endif
 }
 
 /*************** RESOURCE ***************/
 
-RES ResourceFormatLoaderCSharpScript::load(const String &p_path, const String &p_original_path, Error *r_error) {
+RES ResourceFormatLoaderCSharpScript::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress) {
 
 	if (r_error)
 		*r_error = ERR_FILE_CANT_OPEN;
@@ -3437,7 +3508,7 @@ Error ResourceFormatSaverCSharpScript::save(const String &p_path, const RES &p_r
 					"Compile",
 					ProjectSettings::get_singleton()->globalize_path(p_path));
 		} else {
-			ERR_PRINTS("C# project could not be created; cannot add file: '" + p_path + "'.");
+			ERR_PRINT("C# project could not be created; cannot add file: '" + p_path + "'.");
 		}
 	}
 #endif

@@ -31,7 +31,6 @@
 #ifndef THREAD_DUMMY_H
 #define THREAD_DUMMY_H
 
-#include "core/os/mutex.h"
 #include "core/os/rw_lock.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
@@ -46,21 +45,9 @@ public:
 	static void make_default();
 };
 
-class MutexDummy : public Mutex {
+class SemaphoreDummy : public SemaphoreOld {
 
-	static Mutex *create(bool p_recursive);
-
-public:
-	virtual void lock(){};
-	virtual void unlock(){};
-	virtual Error try_lock() { return OK; };
-
-	static void make_default();
-};
-
-class SemaphoreDummy : public Semaphore {
-
-	static Semaphore *create();
+	static SemaphoreOld *create();
 
 public:
 	virtual Error wait() { return OK; };

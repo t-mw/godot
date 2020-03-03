@@ -257,7 +257,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 
 	Vector<Device> devices;
 	volatile bool devices_changed;
-	Mutex *device_lock;
+	Mutex device_lock;
 	Thread *device_thread;
 	volatile bool quit_request;
 
@@ -288,7 +288,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 					ldevices.push_back(d);
 				}
 
-				ea->device_lock->lock();
+				MutexLock lock(ea->device_lock);
 
 				bool different = false;
 
@@ -337,7 +337,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 							Vector<String> props = dp.split("\n");
 							String vendor;
 							String device;
-							d.description + "Device ID: " + d.id + "\n";
+							d.description = "Device ID: " + d.id + "\n";
 							d.api_level = 0;
 							for (int j = 0; j < props.size(); j++) {
 
@@ -381,11 +381,9 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 					ea->devices = ndevices;
 					ea->devices_changed = true;
 				}
-
-				ea->device_lock->unlock();
 			}
 
-			uint64_t sleep = OS::get_singleton()->get_power_state() == OS::POWERSTATE_ON_BATTERY ? 1000 : 100;
+			uint64_t sleep = 200;
 			uint64_t wait = 3000000;
 			uint64_t time = OS::get_singleton()->get_ticks_usec();
 			while (OS::get_singleton()->get_ticks_usec() - time < wait) {
@@ -610,7 +608,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 	static Error save_apk_so(void *p_userdata, const SharedObject &p_so) {
 		if (!p_so.path.get_file().begins_with("lib")) {
 			String err = "Android .so file names must start with \"lib\", but got: " + p_so.path;
-			ERR_PRINTS(err);
+			ERR_PRINT(err);
 			return FAILED;
 		}
 		APKExportData *ed = (APKExportData *)p_userdata;
@@ -631,7 +629,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 		if (!exported) {
 			String abis_string = String(" ").join(abis);
 			String err = "Cannot determine ABI for library \"" + p_so.path + "\". One of the supported ABIs must be used as a tag: " + abis_string;
-			ERR_PRINTS(err);
+			ERR_PRINT(err);
 			return FAILED;
 		}
 		return OK;
@@ -642,9 +640,6 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 		String dst_path = p_path.replace_first("res://", "assets/");
 
 		store_in_apk(ed, dst_path, p_data, _should_compress_asset(p_path, p_data) ? Z_DEFLATED : 0);
-		if (ed->ep->step("File: " + p_path, 3 + p_file * 100 / p_total)) {
-			return ERR_SKIP;
-		}
 		return OK;
 	}
 
@@ -686,8 +681,6 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 
 		int orientation = p_preset->get("screen/orientation");
 
-		bool min_gles3 = ProjectSettings::get_singleton()->get("rendering/quality/driver/driver_name") == "GLES3" &&
-						 !ProjectSettings::get_singleton()->get("rendering/quality/driver/fallback_to_gles2");
 		bool screen_support_small = p_preset->get("screen/support_small");
 		bool screen_support_normal = p_preset->get("screen/support_normal");
 		bool screen_support_large = p_preset->get("screen/support_large");
@@ -706,7 +699,7 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 			aperms++;
 		}
 
-		PoolStringArray user_perms = p_preset->get("permissions/custom_permissions");
+		PackedStringArray user_perms = p_preset->get("permissions/custom_permissions");
 
 		for (int i = 0; i < user_perms.size(); i++) {
 			String user_perm = user_perms[i].strip_edges();
@@ -840,11 +833,6 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 
 								encode_uint32(screen_support_xlarge ? 0xFFFFFFFF : 0, &p_manifest.write[iofs + 16]);
 							}
-						}
-
-						if (tname == "uses-feature" && attrname == "glEsVersion") {
-
-							encode_uint32(min_gles3 ? 0x00030000 : 0x00020000, &p_manifest.write[iofs + 16]);
 						}
 
 						// FIXME: `attr_value != 0xFFFFFFFF` below added as a stopgap measure for GH-32553,
@@ -1320,11 +1308,11 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 				working_image->resize(p_icon.dimensions, p_icon.dimensions, Image::Interpolation::INTERPOLATE_LANCZOS);
 			}
 
-			PoolVector<uint8_t> png_buffer;
+			Vector<uint8_t> png_buffer;
 			Error err = PNGDriverCommon::image_to_png(working_image, png_buffer);
 			if (err == OK) {
 				p_data.resize(png_buffer.size());
-				memcpy(p_data.ptrw(), png_buffer.read().ptr(), p_data.size());
+				memcpy(p_data.ptrw(), png_buffer.ptr(), p_data.size());
 			} else {
 				String err_str = String("Failed to convert resized icon (") + p_processing_file_name + ") to png.";
 				WARN_PRINT(err_str.utf8().get_data());
@@ -1353,11 +1341,10 @@ public:
 		String driver = ProjectSettings::get_singleton()->get("rendering/quality/driver/driver_name");
 		if (driver == "GLES2") {
 			r_features->push_back("etc");
-		} else if (driver == "GLES3") {
+		}
+		// FIXME: Review what texture formats are used for Vulkan.
+		if (driver == "Vulkan") {
 			r_features->push_back("etc2");
-			if (ProjectSettings::get_singleton()->get("rendering/quality/driver/fallback_to_gles2")) {
-				r_features->push_back("etc");
-			}
 		}
 
 		Vector<String> abis = get_enabled_abis(p_preset);
@@ -1409,7 +1396,7 @@ public:
 			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "architectures/" + abi), is_default));
 		}
 
-		r_options->push_back(ExportOption(PropertyInfo(Variant::POOL_STRING_ARRAY, "permissions/custom_permissions"), PoolStringArray()));
+		r_options->push_back(ExportOption(PropertyInfo(Variant::PACKED_STRING_ARRAY, "permissions/custom_permissions"), PackedStringArray()));
 
 		const char **perms = android_perms;
 		while (*perms) {
@@ -1427,7 +1414,7 @@ public:
 		return "Android";
 	}
 
-	virtual Ref<Texture> get_logo() const {
+	virtual Ref<Texture2D> get_logo() const {
 		return logo;
 	}
 
@@ -1443,11 +1430,8 @@ public:
 
 	virtual int get_options_count() const {
 
-		device_lock->lock();
-		int dc = devices.size();
-		device_lock->unlock();
-
-		return dc;
+		MutexLock lock(device_lock);
+		return devices.size();
 	}
 
 	virtual String get_options_tooltip() const {
@@ -1458,16 +1442,14 @@ public:
 	virtual String get_option_label(int p_index) const {
 
 		ERR_FAIL_INDEX_V(p_index, devices.size(), "");
-		device_lock->lock();
-		String s = devices[p_index].name;
-		device_lock->unlock();
-		return s;
+		MutexLock lock(device_lock);
+		return devices[p_index].name;
 	}
 
 	virtual String get_option_tooltip(int p_index) const {
 
 		ERR_FAIL_INDEX_V(p_index, devices.size(), "");
-		device_lock->lock();
+		MutexLock lock(device_lock);
 		String s = devices[p_index].description;
 		if (devices.size() == 1) {
 			// Tooltip will be:
@@ -1475,7 +1457,6 @@ public:
 			// Description
 			s = devices[p_index].name + "\n\n" + s;
 		}
-		device_lock->unlock();
 		return s;
 	}
 
@@ -1490,15 +1471,14 @@ public:
 			return ERR_UNCONFIGURED;
 		}
 
-		device_lock->lock();
+		MutexLock lock(device_lock);
 
 		EditorProgress ep("run", "Running on " + devices[p_device].name, 3);
 
 		String adb = EditorSettings::get_singleton()->get("export/android/adb");
 
 		// Export_temp APK.
-		if (ep.step("Exporting APK", 0)) {
-			device_lock->unlock();
+		if (ep.step("Exporting APK...", 0)) {
 			return ERR_SKIP;
 		}
 
@@ -1513,7 +1493,6 @@ public:
 #define CLEANUP_AND_RETURN(m_err)                         \
 	{                                                     \
 		DirAccess::remove_file_or_error(tmp_export_path); \
-		device_lock->unlock();                            \
 		return m_err;                                     \
 	}
 
@@ -1547,7 +1526,7 @@ public:
 		}
 
 		print_line("Installing to device (please wait...): " + devices[p_device].name);
-		if (ep.step("Installing to device (please wait...)", 2)) {
+		if (ep.step("Installing to device, please wait...", 2)) {
 			CLEANUP_AND_RETURN(ERR_SKIP);
 		}
 
@@ -1614,7 +1593,7 @@ public:
 			}
 		}
 
-		if (ep.step("Running on Device...", 3)) {
+		if (ep.step("Running on device...", 3)) {
 			CLEANUP_AND_RETURN(ERR_SKIP);
 		}
 		args.clear();
@@ -1642,7 +1621,7 @@ public:
 #undef CLEANUP_AND_RETURN
 	}
 
-	virtual Ref<Texture> get_run_icon() const {
+	virtual Ref<Texture2D> get_run_icon() const {
 		return run_icon;
 	}
 
@@ -1878,7 +1857,7 @@ public:
 								new_file += "//CHUNK_" + text + "_BEGIN\n";
 
 								if (!found) {
-									ERR_PRINTS("No end marker found in build.gradle for chunk: " + text);
+									ERR_PRINT("No end marker found in build.gradle for chunk: " + text);
 									f->seek(pos);
 								} else {
 
@@ -1914,7 +1893,7 @@ public:
 								new_file += "//DIR_" + text + "_BEGIN\n";
 
 								if (!found) {
-									ERR_PRINTS("No end marker found in build.gradle for dir: " + text);
+									ERR_PRINT("No end marker found in build.gradle for dir: " + text);
 									f->seek(pos);
 								} else {
 									//add chunk lines
@@ -1973,7 +1952,7 @@ public:
 								new_file += "<!--CHUNK_" + text + "_BEGIN-->\n";
 
 								if (!found) {
-									ERR_PRINTS("No end marker found in AndroidManifest.xml for chunk: " + text);
+									ERR_PRINT("No end marker found in AndroidManifest.xml for chunk: " + text);
 									f->seek(pos);
 								} else {
 									//add chunk lines
@@ -1992,7 +1971,7 @@ public:
 							String last_tag = "android:icon=\"@mipmap/icon\"";
 							int last_tag_pos = l.find(last_tag);
 							if (last_tag_pos == -1) {
-								ERR_PRINTS("Not adding application attributes as the expected tag was not found in '<application': " + last_tag);
+								ERR_PRINT("Not adding application attributes as the expected tag was not found in '<application': " + last_tag);
 								new_file += l + "\n";
 							} else {
 								String base = l.substr(0, last_tag_pos + last_tag.length());
@@ -2119,7 +2098,7 @@ public:
 		FileAccess *src_f = NULL;
 		zlib_filefunc_def io = zipio_create_io_from_file(&src_f);
 
-		if (ep.step("Creating APK", 0)) {
+		if (ep.step("Creating APK...", 0)) {
 			return ERR_SKIP;
 		}
 
@@ -2281,7 +2260,7 @@ public:
 			ret = unzGoToNextFile(pkg);
 		}
 
-		if (ep.step("Adding Files...", 1)) {
+		if (ep.step("Adding files...", 1)) {
 			CLEANUP_AND_RETURN(ERR_SKIP);
 		}
 		Error err = OK;
@@ -2581,7 +2560,6 @@ public:
 		run_icon.instance();
 		run_icon->create_from_image(img);
 
-		device_lock = Mutex::create();
 		devices_changed = true;
 		quit_request = false;
 		device_thread = Thread::create(_device_poll_thread, this);
@@ -2590,7 +2568,6 @@ public:
 	~EditorExportPlatformAndroid() {
 		quit_request = true;
 		Thread::wait_to_finish(device_thread);
-		memdelete(device_lock);
 		memdelete(device_thread);
 	}
 };

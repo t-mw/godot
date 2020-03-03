@@ -304,6 +304,8 @@ void DocData::generate(bool p_basic_types) {
 				}
 			}
 
+			//used to track uninitialized values using valgrind
+			//print_line("getting default value for " + String(name) + "." + String(E->get().name));
 			if (default_value_valid && default_value.get_type() != Variant::OBJECT) {
 				prop.default_value = default_value.get_construct_string().replace("\n", "");
 			}
@@ -483,7 +485,7 @@ void DocData::generate(bool p_basic_types) {
 
 				PropertyDoc pd;
 				pd.name = E->get();
-				pd.type = "Texture";
+				pd.type = "Texture2D";
 				c.theme_properties.push_back(pd);
 			}
 			l.clear();
@@ -531,7 +533,7 @@ void DocData::generate(bool p_basic_types) {
 		ClassDoc &c = class_list[cname];
 		c.name = cname;
 
-		Variant::CallError cerror;
+		Callable::CallError cerror;
 		Variant v = Variant::construct(Variant::Type(i), NULL, 0, cerror);
 
 		List<MethodInfo> method_list;
@@ -560,11 +562,12 @@ void DocData::generate(bool p_basic_types) {
 				method.arguments.push_back(ad);
 			}
 
-			if (mi.return_val.type == Variant::NIL) {
-				if (mi.return_val.name != "")
-					method.return_type = "Variant";
-			} else {
-				method.return_type = Variant::get_type_name(mi.return_val.type);
+			return_doc_from_retinfo(method, mi.return_val);
+
+			if (mi.flags & METHOD_FLAG_VARARG) {
+				if (method.qualifiers != "")
+					method.qualifiers += " ";
+				method.qualifiers += "vararg";
 			}
 
 			c.methods.push_back(method);
@@ -1030,7 +1033,7 @@ Error DocData::save_classes(const String &p_default_path, const Map<String, Stri
 		String header = "<class name=\"" + c.name + "\"";
 		if (c.inherits != "")
 			header += " inherits=\"" + c.inherits + "\"";
-		header += String(" version=\"") + VERSION_NUMBER + "\"";
+		header += String(" version=\"") + VERSION_BRANCH + "\"";
 		header += ">";
 		_write_string(f, 0, header);
 

@@ -33,17 +33,17 @@
 #include <mono/metadata/exception.h>
 
 #include "core/os/dir_access.h"
+#include "core/os/mutex.h"
 #include "core/os/os.h"
 #include "core/project_settings.h"
 #include "core/reference.h"
 
 #ifdef TOOLS_ENABLED
-#include "editor/script_editor_debugger.h"
+#include "editor/debugger/script_editor_debugger.h"
 #endif
 
 #include "../csharp_script.h"
 #include "../utils/macros.h"
-#include "../utils/mutex_utils.h"
 #include "gd_mono.h"
 #include "gd_mono_cache.h"
 #include "gd_mono_class.h"
@@ -74,7 +74,7 @@ MonoObject *unmanaged_get_managed(Object *unmanaged) {
 	CSharpScriptBinding &script_binding = ((Map<Object *, CSharpScriptBinding>::Element *)data)->value();
 
 	if (!script_binding.inited) {
-		SCOPED_MUTEX_LOCK(CSharpLanguage::get_singleton()->get_language_bind_mutex());
+		MutexLock lock(CSharpLanguage::get_singleton()->get_language_bind_mutex());
 
 		if (!script_binding.inited) { // Other thread may have set it up
 			// Already had a binding that needs to be setup
@@ -354,7 +354,7 @@ void debug_send_unhandled_exception_error(MonoException *p_exc) {
 	if (!ScriptDebugger::get_singleton()) {
 #ifdef TOOLS_ENABLED
 		if (Engine::get_singleton()->is_editor_hint()) {
-			ERR_PRINTS(GDMonoUtils::get_exception_name_and_message(p_exc));
+			ERR_PRINT(GDMonoUtils::get_exception_name_and_message(p_exc));
 		}
 #endif
 		return;
@@ -431,7 +431,7 @@ void set_pending_exception(MonoException *p_exc) {
 	}
 
 	if (!mono_runtime_set_pending_exception(p_exc, false)) {
-		ERR_PRINTS("Exception thrown from managed code, but it could not be set as pending:");
+		ERR_PRINT("Exception thrown from managed code, but it could not be set as pending:");
 		GDMonoUtils::debug_print_unhandled_exception(p_exc);
 	}
 #endif

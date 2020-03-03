@@ -32,6 +32,7 @@
 
 #include "core/core_string_names.h"
 #include "core/project_settings.h"
+#include <stdint.h>
 
 ScriptLanguage *ScriptServer::_languages[MAX_LANGUAGES];
 int ScriptServer::_language_count = 0;
@@ -306,17 +307,17 @@ Variant ScriptInstance::call(const StringName &p_method, VARIANT_ARG_DECLARE) {
 		argc++;
 	}
 
-	Variant::CallError error;
+	Callable::CallError error;
 	return call(p_method, argptr, argc, error);
 }
 
 void ScriptInstance::call_multilevel(const StringName &p_method, const Variant **p_args, int p_argcount) {
-	Variant::CallError ce;
+	Callable::CallError ce;
 	call(p_method, p_args, p_argcount, ce); // script may not support multilevel calls
 }
 
 void ScriptInstance::call_multilevel_reversed(const StringName &p_method, const Variant **p_args, int p_argcount) {
-	Variant::CallError ce;
+	Callable::CallError ce;
 	call(p_method, p_args, p_argcount, ce); // script may not support multilevel calls
 }
 
@@ -642,6 +643,14 @@ Variant PlaceHolderScriptInstance::property_get_fallback(const StringName &p_nam
 		*r_valid = false;
 
 	return Variant();
+}
+
+uint16_t PlaceHolderScriptInstance::get_rpc_method_id(const StringName &p_method) const {
+	return UINT16_MAX;
+}
+
+uint16_t PlaceHolderScriptInstance::get_rset_property_id(const StringName &p_method) const {
+	return UINT16_MAX;
 }
 
 PlaceHolderScriptInstance::PlaceHolderScriptInstance(ScriptLanguage *p_language, Ref<Script> p_script, Object *p_owner) :

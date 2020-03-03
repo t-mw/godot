@@ -69,8 +69,6 @@ OSStatus AudioDriverCoreAudio::output_device_address_cb(AudioObjectID inObjectID
 #endif
 
 Error AudioDriverCoreAudio::init() {
-	mutex = Mutex::create();
-
 	AudioComponentDescription desc;
 	zeromem(&desc, sizeof(desc));
 	desc.componentType = kAudioUnitType_Output;
@@ -241,7 +239,7 @@ OSStatus AudioDriverCoreAudio::input_callback(void *inRefCon,
 			}
 		}
 	} else {
-		ERR_PRINTS("AudioUnitRender failed, code: " + itos(result));
+		ERR_PRINT("AudioUnitRender failed, code: " + itos(result));
 	}
 
 	ad->unlock();
@@ -253,7 +251,7 @@ void AudioDriverCoreAudio::start() {
 	if (!active) {
 		OSStatus result = AudioOutputUnitStart(audio_unit);
 		if (result != noErr) {
-			ERR_PRINTS("AudioOutputUnitStart failed, code: " + itos(result));
+			ERR_PRINT("AudioOutputUnitStart failed, code: " + itos(result));
 		} else {
 			active = true;
 		}
@@ -264,7 +262,7 @@ void AudioDriverCoreAudio::stop() {
 	if (active) {
 		OSStatus result = AudioOutputUnitStop(audio_unit);
 		if (result != noErr) {
-			ERR_PRINTS("AudioOutputUnitStop failed, code: " + itos(result));
+			ERR_PRINT("AudioOutputUnitStop failed, code: " + itos(result));
 		} else {
 			active = false;
 		}
@@ -280,19 +278,15 @@ AudioDriver::SpeakerMode AudioDriverCoreAudio::get_speaker_mode() const {
 };
 
 void AudioDriverCoreAudio::lock() {
-	if (mutex)
-		mutex->lock();
+	mutex.lock();
 };
 
 void AudioDriverCoreAudio::unlock() {
-	if (mutex)
-		mutex->unlock();
+	mutex.unlock();
 };
 
 bool AudioDriverCoreAudio::try_lock() {
-	if (mutex)
-		return mutex->try_lock() == OK;
-	return true;
+	return mutex.try_lock() == OK;
 }
 
 void AudioDriverCoreAudio::finish() {
@@ -343,11 +337,6 @@ void AudioDriverCoreAudio::finish() {
 
 		audio_unit = NULL;
 		unlock();
-	}
-
-	if (mutex) {
-		memdelete(mutex);
-		mutex = NULL;
 	}
 }
 
@@ -491,7 +480,7 @@ Error AudioDriverCoreAudio::capture_start() {
 
 	OSStatus result = AudioOutputUnitStart(input_unit);
 	if (result != noErr) {
-		ERR_PRINTS("AudioOutputUnitStart failed, code: " + itos(result));
+		ERR_PRINT("AudioOutputUnitStart failed, code: " + itos(result));
 	}
 
 	return OK;
@@ -502,7 +491,7 @@ Error AudioDriverCoreAudio::capture_stop() {
 	if (input_unit) {
 		OSStatus result = AudioOutputUnitStop(input_unit);
 		if (result != noErr) {
-			ERR_PRINTS("AudioOutputUnitStop failed, code: " + itos(result));
+			ERR_PRINT("AudioOutputUnitStop failed, code: " + itos(result));
 		}
 	}
 
@@ -691,7 +680,6 @@ AudioDriverCoreAudio::AudioDriverCoreAudio() :
 		audio_unit(NULL),
 		input_unit(NULL),
 		active(false),
-		mutex(NULL),
 		device_name("Default"),
 		capture_device_name("Default"),
 		mix_rate(0),

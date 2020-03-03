@@ -44,6 +44,7 @@
 #include "core/project_settings.h"
 #include "core/register_core_types.h"
 #include "core/script_debugger_local.h"
+#include "core/script_debugger_remote.h"
 #include "core/script_language.h"
 #include "core/translation.h"
 #include "core/version.h"
@@ -58,7 +59,6 @@
 #include "main/tests/test_main.h"
 #include "modules/register_module_types.h"
 #include "platform/register_platform_apis.h"
-#include "scene/debugger/script_debugger_remote.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
 #include "scene/register_scene_types.h"
@@ -66,6 +66,8 @@
 #include "servers/arvr_server.h"
 #include "servers/audio_server.h"
 #include "servers/camera_server.h"
+#include "servers/navigation_2d_server.h"
+#include "servers/navigation_server.h"
 #include "servers/physics_2d_server.h"
 #include "servers/physics_server.h"
 #include "servers/register_server_types.h"
@@ -103,6 +105,8 @@ static CameraServer *camera_server = NULL;
 static ARVRServer *arvr_server = NULL;
 static PhysicsServer *physics_server = NULL;
 static Physics2DServer *physics_2d_server = NULL;
+static NavigationServer *navigation_server = NULL;
+static Navigation2DServer *navigation_2d_server = NULL;
 // We error out if setup2() doesn't turn this true
 static bool _start_success = false;
 
@@ -197,6 +201,21 @@ void finalize_physics() {
 	memdelete(physics_2d_server);
 }
 
+void initialize_navigation_server() {
+	ERR_FAIL_COND(navigation_server != NULL);
+
+	navigation_server = NavigationServerManager::new_default_server();
+	navigation_2d_server = memnew(Navigation2DServer);
+}
+
+void finalize_navigation_server() {
+	memdelete(navigation_server);
+	navigation_server = NULL;
+
+	memdelete(navigation_2d_server);
+	navigation_2d_server = NULL;
+}
+
 //#define DEBUG_INIT
 #ifdef DEBUG_INIT
 #define MAIN_PRINT(m_txt) print_line(m_txt)
@@ -269,6 +288,7 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  -d, --debug                      Debug (local stdout debugger).\n");
 	OS::get_singleton()->print("  -b, --breakpoints                Breakpoint list as source::line comma-separated pairs, no spaces (use %%20 instead).\n");
 	OS::get_singleton()->print("  --profiling                      Enable profiling in the script debugger.\n");
+	OS::get_singleton()->print("  --gpu-abort                      Abort on GPU errors (usually validation layer errors), may help see the problem if your system freezes.\n");
 	OS::get_singleton()->print("  --remote-debug <address>         Remote debug (<host/IP>:<port> address).\n");
 #if defined(DEBUG_ENABLED) && !defined(SERVER_ENABLED)
 	OS::get_singleton()->print("  --debug-collisions               Show collision shapes when running the scene.\n");
@@ -335,7 +355,6 @@ void Main::print_help(const char *p_binary) {
  */
 
 Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
-	RID_OwnerBase::init_rid();
 
 	OS::get_singleton()->initialize_core();
 
@@ -532,6 +551,9 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (I->get() == "-w" || I->get() == "--windowed") { // force windowed window
 
 			init_windowed = true;
+		} else if (I->get() == "--gpu-abort") { // force windowed window
+
+			Engine::singleton->abort_on_gpu_errors = true;
 		} else if (I->get() == "-t" || I->get() == "--always-on-top") { // force always-on-top window
 
 			init_always_on_top = true;
@@ -669,7 +691,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			editor = true;
 #ifdef DEBUG_METHODS_ENABLED
 		} else if (I->get() == "--gdnative-generate-json-api") {
-			// Register as an editor instance to use the GLES2 fallback automatically on hardware that doesn't support the GLES3 backend
+			// Register as an editor instance to use low-end fallback if relevant.
 			editor = true;
 
 			// We still pass it to the main arguments since the argument handling itself is not done in this function
@@ -974,13 +996,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	OS::get_singleton()->set_cmdline(execpath, main_args);
 
-	GLOBAL_DEF("rendering/quality/driver/driver_name", "GLES3");
-	ProjectSettings::get_singleton()->set_custom_property_info("rendering/quality/driver/driver_name", PropertyInfo(Variant::STRING, "rendering/quality/driver/driver_name", PROPERTY_HINT_ENUM, "GLES2,GLES3"));
+	GLOBAL_DEF("rendering/quality/driver/driver_name", "Vulkan");
+	ProjectSettings::get_singleton()->set_custom_property_info("rendering/quality/driver/driver_name", PropertyInfo(Variant::STRING, "rendering/quality/driver/driver_name", PROPERTY_HINT_ENUM, "Vulkan,GLES2"));
 	if (video_driver == "") {
 		video_driver = GLOBAL_GET("rendering/quality/driver/driver_name");
 	}
-
-	GLOBAL_DEF("rendering/quality/driver/fallback_to_gles2", false);
 
 	// Assigning here even though it's GLES2-specific, to be sure that it appears in docs
 	GLOBAL_DEF("rendering/quality/2d/gles2_use_nvidia_rect_flicker_workaround", false);
@@ -1191,6 +1211,9 @@ error:
 
 Error Main::setup2(Thread::ID p_main_tid_override) {
 
+	preregister_module_types();
+	preregister_server_types();
+
 	// Print engine name and version
 	print_line(String(VERSION_NAME) + " v" + get_full_version_string() + " - " + String(VERSION_WEBSITE));
 
@@ -1266,7 +1289,7 @@ Error Main::setup2(Thread::ID p_main_tid_override) {
 			boot_logo.instance();
 			Error load_err = ImageLoader::load_image(boot_logo_path, boot_logo);
 			if (load_err)
-				ERR_PRINTS("Non-existing or invalid boot splash at '" + boot_logo_path + "'. Loading default splash.");
+				ERR_PRINT("Non-existing or invalid boot splash at '" + boot_logo_path + "'. Loading default splash.");
 		}
 
 		Color boot_bg_color = GLOBAL_DEF("application/boot_splash/bg_color", boot_splash_bg_color);
@@ -1334,7 +1357,7 @@ Error Main::setup2(Thread::ID p_main_tid_override) {
 
 	if (String(ProjectSettings::get_singleton()->get("display/mouse_cursor/custom_image")) != String()) {
 
-		Ref<Texture> cursor = ResourceLoader::load(ProjectSettings::get_singleton()->get("display/mouse_cursor/custom_image"));
+		Ref<Texture2D> cursor = ResourceLoader::load(ProjectSettings::get_singleton()->get("display/mouse_cursor/custom_image"));
 		if (cursor.is_valid()) {
 			Vector2 hotspot = ProjectSettings::get_singleton()->get("display/mouse_cursor/custom_image_hotspot");
 			Input::get_singleton()->set_custom_mouse_cursor(cursor, Input::CURSOR_ARROW, hotspot);
@@ -1356,6 +1379,7 @@ Error Main::setup2(Thread::ID p_main_tid_override) {
 	camera_server = CameraServer::create();
 
 	initialize_physics();
+	initialize_navigation_server();
 	register_server_singletons();
 
 	register_driver_types();
@@ -1635,12 +1659,6 @@ bool Main::start() {
 
 		if (!project_manager && !editor) { // game
 			if (game_path != "" || script != "") {
-				if (script_debugger && script_debugger->is_remote()) {
-					ScriptDebuggerRemote *remote_debugger = static_cast<ScriptDebuggerRemote *>(script_debugger);
-
-					remote_debugger->set_scene_tree(sml);
-				}
-
 				//autoload
 				List<PropertyInfo> props;
 				ProjectSettings::get_singleton()->get_property_list(&props);
@@ -1697,7 +1715,7 @@ bool Main::start() {
 						ERR_CONTINUE_MSG(obj == NULL, "Cannot instance script for autoload, expected 'Node' inheritance, got: " + String(ibt));
 
 						n = Object::cast_to<Node>(obj);
-						n->set_script(script_res.get_ref_ptr());
+						n->set_script(script_res);
 					}
 
 					ERR_CONTINUE_MSG(!n, "Path in autoload not a node or script: " + path);
@@ -1732,6 +1750,12 @@ bool Main::start() {
 			}
 		}
 #endif
+
+		{
+
+			int directional_atlas_size = GLOBAL_GET("rendering/quality/directional_shadow/size");
+			VisualServer::get_singleton()->directional_shadow_atlas_set_size(directional_atlas_size);
+		}
 
 		if (!editor && !project_manager) {
 			//standard helpers that can be changed from main config
@@ -1776,14 +1800,17 @@ bool Main::start() {
 			sml->get_root()->set_shadow_atlas_quadrant_subdiv(1, Viewport::ShadowAtlasQuadrantSubdiv(shadow_atlas_q1_subdiv));
 			sml->get_root()->set_shadow_atlas_quadrant_subdiv(2, Viewport::ShadowAtlasQuadrantSubdiv(shadow_atlas_q2_subdiv));
 			sml->get_root()->set_shadow_atlas_quadrant_subdiv(3, Viewport::ShadowAtlasQuadrantSubdiv(shadow_atlas_q3_subdiv));
-			Viewport::Usage usage = Viewport::Usage(int(GLOBAL_GET("rendering/quality/intended_usage/framebuffer_allocation")));
-			sml->get_root()->set_usage(usage);
 
 			bool snap_controls = GLOBAL_DEF("gui/common/snap_controls_to_pixels", true);
 			sml->get_root()->set_snap_controls_to_pixels(snap_controls);
 
 			bool font_oversampling = GLOBAL_DEF("rendering/quality/dynamic_fonts/use_oversampling", true);
 			sml->set_use_font_oversampling(font_oversampling);
+
+			int texture_filter = GLOBAL_DEF("rendering/canvas_textures/default_texture_filter", 1);
+			int texture_repeat = GLOBAL_DEF("rendering/canvas_textures/default_texture_repeat", 0);
+			sml->get_root()->set_default_canvas_item_texture_filter(Viewport::DefaultCanvasItemTextureFilter(texture_filter));
+			sml->get_root()->set_default_canvas_item_texture_repeat(Viewport::DefaultCanvasItemTextureRepeat(texture_repeat));
 
 		} else {
 
@@ -1792,11 +1819,16 @@ bool Main::start() {
 			GLOBAL_DEF("display/window/stretch/aspect", "ignore");
 			ProjectSettings::get_singleton()->set_custom_property_info("display/window/stretch/aspect", PropertyInfo(Variant::STRING, "display/window/stretch/aspect", PROPERTY_HINT_ENUM, "ignore,keep,keep_width,keep_height,expand"));
 			GLOBAL_DEF("display/window/stretch/shrink", 1.0);
-			ProjectSettings::get_singleton()->set_custom_property_info("display/window/stretch/shrink", PropertyInfo(Variant::REAL, "display/window/stretch/shrink", PROPERTY_HINT_RANGE, "1.0,8.0,0.1"));
+			ProjectSettings::get_singleton()->set_custom_property_info("display/window/stretch/shrink", PropertyInfo(Variant::FLOAT, "display/window/stretch/shrink", PROPERTY_HINT_RANGE, "1.0,8.0,0.1"));
 			sml->set_auto_accept_quit(GLOBAL_DEF("application/config/auto_accept_quit", true));
 			sml->set_quit_on_go_back(GLOBAL_DEF("application/config/quit_on_go_back", true));
 			GLOBAL_DEF("gui/common/snap_controls_to_pixels", true);
 			GLOBAL_DEF("rendering/quality/dynamic_fonts/use_oversampling", true);
+
+			GLOBAL_DEF("rendering/canvas_textures/default_texture_filter", 1);
+			ProjectSettings::get_singleton()->set_custom_property_info("rendering/canvas_textures/default_texture_filter", PropertyInfo(Variant::INT, "rendering/canvas_textures/default_texture_filter", PROPERTY_HINT_ENUM, "Nearest,Linear,MipmapLinear,MipmapNearest"));
+			GLOBAL_DEF("rendering/canvas_textures/default_texture_repeat", 0);
+			ProjectSettings::get_singleton()->set_custom_property_info("rendering/canvas_textures/default_texture_repeat", PropertyInfo(Variant::INT, "rendering/canvas_textures/default_texture_repeat", PROPERTY_HINT_ENUM, "Disable,Enable,Mirror"));
 		}
 
 		String local_game_path;
@@ -2007,6 +2039,8 @@ bool Main::iteration() {
 			break;
 		}
 
+		NavigationServer::get_singleton_mut()->process(frame_slice * time_scale);
+
 		message_queue->flush();
 
 		PhysicsServer::get_singleton()->step(frame_slice * time_scale);
@@ -2200,6 +2234,7 @@ void Main::cleanup() {
 
 	OS::get_singleton()->finalize();
 	finalize_physics();
+	finalize_navigation_server();
 
 	if (packed_data)
 		memdelete(packed_data);
