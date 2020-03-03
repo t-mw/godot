@@ -450,7 +450,7 @@ void CSGShape::_update_shape() {
 		}
 
 		int idx = root_mesh->get_surface_count();
-		root_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, array, Array(), Mesh::ArrayFormat::ARRAY_COMPRESS_DEFAULT & (~Mesh::ArrayFormat::ARRAY_COMPRESS_TEX_UV));
+		root_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, array, Array(), Dictionary(), Mesh::ArrayFormat::ARRAY_COMPRESS_DEFAULT & (~Mesh::ArrayFormat::ARRAY_COMPRESS_TEX_UV));
 		root_mesh->surface_set_material(idx, surfaces[i].material);
 	}
 
@@ -2351,7 +2351,7 @@ void CSGPolygon::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "spin_sides", PROPERTY_HINT_RANGE, "3,64,1"), "set_spin_sides", "get_spin_sides");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "path_node", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Path"), "set_path_node", "get_path_node");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "path_interval", PROPERTY_HINT_EXP_RANGE, "0.001,1000.0,0.001,or_greater"), "set_path_interval", "get_path_interval");
-	ADD_PROPERTY(PropertyInfo(Variant::REAL, "angle_simplify", PROPERTY_HINT_EXP_RANGE, "0.0,180.0,0.0,or_greater"), "set_angle_simplify", "get_angle_simplify");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "angle_simplify", PROPERTY_HINT_EXP_RANGE, "0.0,180.0,0.0,or_greater"), "set_angle_simplify", "get_angle_simplify");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "path_rotation", PROPERTY_HINT_ENUM, "Polygon,Path,PathFollow"), "set_path_rotation", "get_path_rotation");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "path_local"), "set_path_local", "is_path_local");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "path_continuous_u"), "set_path_continuous_u", "is_path_continuous_u");
