@@ -6,6 +6,7 @@ scons p=windows vsproj=yes
 
 What I used:
 scons p=windows tools=yes arch=x86 target=release_debug vsproj=yes
+scons -j4 p=windows tools=yes target=release_debug vsproj=yes
 
 https://github.com/Gramps/GodotSteam/tree/godot3-min
 
