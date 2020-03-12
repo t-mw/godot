@@ -572,7 +572,7 @@ public:
 	int get_current_drive();
 
 	Error change_dir(String p_dir); // Can be relative or absolute, return false on success.
-	String get_current_dir(); // Return current dir location.
+	String get_current_dir(bool p_include_drive = true); // Return current dir location.
 
 	Error make_dir(String p_dir);
 	Error make_dir_recursive(String p_dir);
@@ -635,16 +635,14 @@ public:
 class _Semaphore : public Reference {
 
 	GDCLASS(_Semaphore, Reference);
-	SemaphoreOld *semaphore;
+	Semaphore semaphore;
 
 	static void _bind_methods();
 
 public:
-	Error wait();
-	Error post();
-
-	_Semaphore();
-	~_Semaphore();
+	void wait();
+	Error try_wait();
+	void post();
 };
 
 class _Thread : public Reference {

@@ -2344,10 +2344,10 @@ Error _Directory::change_dir(String p_dir) {
 	ERR_FAIL_COND_V_MSG(!d, ERR_UNCONFIGURED, "Directory must be opened before use.");
 	return d->change_dir(p_dir);
 }
-String _Directory::get_current_dir() {
+String _Directory::get_current_dir(bool p_include_drive) {
 
 	ERR_FAIL_COND_V_MSG(!d, "", "Directory must be opened before use.");
-	return d->get_current_dir();
+	return d->get_current_dir(p_include_drive);
 }
 Error _Directory::make_dir(String p_dir) {
 
@@ -2444,7 +2444,7 @@ void _Directory::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_drive", "idx"), &_Directory::get_drive);
 	ClassDB::bind_method(D_METHOD("get_current_drive"), &_Directory::get_current_drive);
 	ClassDB::bind_method(D_METHOD("change_dir", "todir"), &_Directory::change_dir);
-	ClassDB::bind_method(D_METHOD("get_current_dir"), &_Directory::get_current_dir);
+	ClassDB::bind_method(D_METHOD("get_current_dir", "include_drive"), &_Directory::get_current_dir, DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("make_dir", "path"), &_Directory::make_dir);
 	ClassDB::bind_method(D_METHOD("make_dir_recursive", "path"), &_Directory::make_dir_recursive);
 	ClassDB::bind_method(D_METHOD("file_exists", "path"), &_Directory::file_exists);
@@ -2576,30 +2576,26 @@ void _Marshalls::_bind_methods() {
 
 ////////////////
 
-Error _Semaphore::wait() {
+void _Semaphore::wait() {
 
-	return semaphore->wait();
+	semaphore.wait();
 }
 
-Error _Semaphore::post() {
+Error _Semaphore::try_wait() {
 
-	return semaphore->post();
+	return semaphore.try_wait() ? OK : ERR_BUSY;
+}
+
+void _Semaphore::post() {
+
+	semaphore.post();
 }
 
 void _Semaphore::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("wait"), &_Semaphore::wait);
+	ClassDB::bind_method(D_METHOD("try_wait"), &_Semaphore::try_wait);
 	ClassDB::bind_method(D_METHOD("post"), &_Semaphore::post);
-}
-
-_Semaphore::_Semaphore() {
-
-	semaphore = SemaphoreOld::create();
-}
-
-_Semaphore::~_Semaphore() {
-
-	memdelete(semaphore);
 }
 
 ///////////////

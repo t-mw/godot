@@ -33,10 +33,10 @@
 #include "core/color_names.inc"
 #include "core/core_string_names.h"
 #include "core/crypto/crypto_core.h"
+#include "core/debugger/engine_debugger.h"
 #include "core/io/compression.h"
 #include "core/object.h"
 #include "core/os/os.h"
-#include "core/script_language.h"
 
 typedef void (*VariantFunc)(Variant &r_ret, Variant &p_self, const Variant **p_args);
 typedef void (*VariantConstructFunc)(Variant &r_ret, const Variant **p_args);
@@ -391,7 +391,7 @@ struct _VariantCall {
 	VCALL_LOCALMEM0R(Rect2, has_no_area);
 	VCALL_LOCALMEM1R(Rect2, has_point);
 	VCALL_LOCALMEM1R(Rect2, is_equal_approx);
-	VCALL_LOCALMEM1R(Rect2, intersects);
+	VCALL_LOCALMEM2R(Rect2, intersects);
 	VCALL_LOCALMEM1R(Rect2, encloses);
 	VCALL_LOCALMEM1R(Rect2, clip);
 	VCALL_LOCALMEM1R(Rect2, merge);
@@ -1213,7 +1213,7 @@ void Variant::call_ptr(const StringName &p_method, const Variant **p_args, int p
 			return;
 		}
 #ifdef DEBUG_ENABLED
-		if (ScriptDebugger::get_singleton() && !_get_obj().id.is_reference() && ObjectDB::get_instance(_get_obj().id) == nullptr) {
+		if (EngineDebugger::is_active() && !_get_obj().id.is_reference() && ObjectDB::get_instance(_get_obj().id) == nullptr) {
 			r_error.error = Callable::CallError::CALL_ERROR_INSTANCE_IS_NULL;
 			return;
 		}
@@ -1834,7 +1834,7 @@ void register_variant_methods() {
 	ADDFUNC0R(RECT2, BOOL, Rect2, has_no_area, varray());
 	ADDFUNC1R(RECT2, BOOL, Rect2, has_point, VECTOR2, "point", varray());
 	ADDFUNC1R(RECT2, BOOL, Rect2, is_equal_approx, RECT2, "rect", varray());
-	ADDFUNC1R(RECT2, BOOL, Rect2, intersects, RECT2, "b", varray());
+	ADDFUNC2R(RECT2, BOOL, Rect2, intersects, RECT2, "b", BOOL, "include_borders", varray(false));
 	ADDFUNC1R(RECT2, BOOL, Rect2, encloses, RECT2, "b", varray());
 	ADDFUNC1R(RECT2, RECT2, Rect2, clip, RECT2, "b", varray());
 	ADDFUNC1R(RECT2, RECT2, Rect2, merge, RECT2, "b", varray());

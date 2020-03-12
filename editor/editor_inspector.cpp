@@ -29,6 +29,7 @@
 /*************************************************************************/
 
 #include "editor_inspector.h"
+
 #include "array_property_edit.h"
 #include "dictionary_property_edit.h"
 #include "editor_feature_profile.h"
@@ -2052,16 +2053,16 @@ void EditorInspector::_edit_set(const String &p_name, const Variant &p_value, bo
 	}
 }
 
-void EditorInspector::_property_changed(const String &p_path, const Variant &p_value, const String &p_name, bool changing) {
+void EditorInspector::_property_changed(const String &p_path, const Variant &p_value, const String &p_name, bool p_changing) {
 
 	// The "changing" variable must be true for properties that trigger events as typing occurs,
-	// like "text_changed" signal. eg: Text property of Label, Button, RichTextLabel, etc.
-	if (changing)
+	// like "text_changed" signal. E.g. text property of Label, Button, RichTextLabel, etc.
+	if (p_changing)
 		this->changing++;
 
 	_edit_set(p_path, p_value, false, p_name);
 
-	if (changing)
+	if (p_changing)
 		this->changing--;
 
 	if (restart_request_props.has(p_path)) {

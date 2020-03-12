@@ -2978,7 +2978,7 @@ class VisualShaderNodePluginDefaultEditor : public VBoxContainer {
 	Ref<Resource> parent_resource;
 
 public:
-	void _property_changed(const String &prop, const Variant &p_value, const String &p_field, bool p_changing = false) {
+	void _property_changed(const String &p_property, const Variant &p_value, const String &p_field = "", bool p_changing = false) {
 
 		if (p_changing)
 			return;
@@ -2986,13 +2986,13 @@ public:
 		UndoRedo *undo_redo = EditorNode::get_singleton()->get_undo_redo();
 
 		updating = true;
-		undo_redo->create_action(TTR("Edit Visual Property") + ": " + prop, UndoRedo::MERGE_ENDS);
-		undo_redo->add_do_property(node.ptr(), prop, p_value);
-		undo_redo->add_undo_property(node.ptr(), prop, node->get(prop));
+		undo_redo->create_action(TTR("Edit Visual Property") + ": " + p_property, UndoRedo::MERGE_ENDS);
+		undo_redo->add_do_property(node.ptr(), p_property, p_value);
+		undo_redo->add_undo_property(node.ptr(), p_property, node->get(p_property));
 
 		if (p_value.get_type() == Variant::OBJECT) {
 
-			RES prev_res = node->get(prop);
+			RES prev_res = node->get(p_property);
 			RES curr_res = p_value;
 
 			if (curr_res.is_null()) {
