@@ -69,6 +69,7 @@ struct ColladaImport {
 	bool force_make_tangents;
 	bool apply_mesh_xform_to_vertices;
 	bool use_mesh_builtin_materials;
+	bool override_fps;
 	float bake_fps;
 
 	Map<String, NodeMap> node_map; //map from collada node to engine node
@@ -1494,7 +1495,7 @@ void ColladaImport::create_animation(int p_clip, bool p_make_tracks_in_all_bones
 	Vector<float> base_snapshots;
 
 	float f = 0;
-	float snapshot_interval = 1.0 / bake_fps; //should be customizable somewhere...
+	float snapshot_interval = 1.0 / bake_fps;
 
 	float anim_length = collada.state.animation_length;
 	if (p_clip >= 0 && collada.state.animation_clips[p_clip].end)
@@ -1548,7 +1549,7 @@ void ColladaImport::create_animation(int p_clip, bool p_make_tracks_in_all_bones
 
 		Vector<float> snapshots = base_snapshots;
 
-		if (nm.anim_tracks.size() == 1) {
+		if (!(override_fps)) {
 			//use snapshot keys from anim track instead, because this was most likely exported baked
 			const Collada::AnimationTrack &at = collada.state.animation_tracks[nm.anim_tracks.front()->get()];
 			snapshots.clear();
@@ -1771,6 +1772,7 @@ Node *EditorSceneImporterCollada::import_scene(const String &p_path, uint32_t p_
 		flags |= Collada::IMPORT_FLAG_ANIMATION;
 
 	state.use_mesh_builtin_materials = !(p_flags & IMPORT_MATERIALS_IN_INSTANCES);
+	state.override_fps = p_flags & EditorSceneImporter::IMPORT_ANIMATION_OVERRIDE_FPS;
 	state.bake_fps = p_bake_fps;
 
 	Error err = state.load(p_path, flags, p_flags & EditorSceneImporter::IMPORT_GENERATE_TANGENT_ARRAYS, p_flags & EditorSceneImporter::IMPORT_USE_COMPRESSION);

@@ -300,6 +300,7 @@ class EditorSceneImporterGLTF : public EditorSceneImporter {
 		Vector<uint8_t> glb_data;
 
 		bool use_named_skin_binds;
+		bool override_fps;
 
 		Vector<GLTFNode *> nodes;
 		Vector<Vector<uint8_t> > buffers;

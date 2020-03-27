@@ -2825,53 +2825,125 @@ void EditorSceneImporterGLTF::_import_animation(GLTFState &state, AnimationPlaye
 			}
 
 			bool last = false;
-			while (true) {
 
-				Vector3 pos = base_pos;
-				Quat rot = base_rot;
-				Vector3 scale = base_scale;
+			if (state.override_fps) {
+				while (true) {
 
-				if (track.translation_track.times.size()) {
-					pos = _interpolate_track<Vector3>(track.translation_track.times, track.translation_track.values, time, track.translation_track.interpolation);
+					Vector3 pos = base_pos;
+					Quat rot = base_rot;
+					Vector3 scale = base_scale;
+
+					if (track.translation_track.times.size()) {
+						pos = _interpolate_track<Vector3>(track.translation_track.times, track.translation_track.values, time, track.translation_track.interpolation);
+					}
+
+					if (track.rotation_track.times.size()) {
+						rot = _interpolate_track<Quat>(track.rotation_track.times, track.rotation_track.values, time, track.rotation_track.interpolation);
+					}
+
+					if (track.scale_track.times.size()) {
+						scale = _interpolate_track<Vector3>(track.scale_track.times, track.scale_track.values, time, track.scale_track.interpolation);
+					}
+
+					if (node->skeleton >= 0) {
+
+						Transform xform;
+						xform.basis.set_quat_scale(rot, scale);
+						xform.origin = pos;
+
+						const Skeleton *skeleton = state.skeletons[node->skeleton].godot_skeleton;
+						const int bone_idx = skeleton->find_bone(node->name);
+						xform = skeleton->get_bone_rest(bone_idx).affine_inverse() * xform;
+
+						rot = xform.basis.get_rotation_quat();
+						rot.normalize();
+						scale = xform.basis.get_scale();
+						pos = xform.origin;
+					}
+
+					animation->transform_track_insert_key(track_idx, time, pos, rot, scale);
+
+					if (last) {
+						break;
+					}
+					time += increment;
+					if (time >= length) {
+						last = true;
+						time = length;
+					}
 				}
+			} else {
+				// We need to gather all times in tracks that have any data.  Some times might just have rotation but not location, for example.
+				int rot_index = 0;
+				int loc_index = 0;
+				int scale_index = 0;
+				float time = -1.0;
+				const int rot_size = track.rotation_track.times.size();
+				const int loc_size = track.translation_track.times.size();
+				const int scale_size = track.scale_track.times.size();
 
-				if (track.rotation_track.times.size()) {
-					rot = _interpolate_track<Quat>(track.rotation_track.times, track.rotation_track.values, time, track.rotation_track.interpolation);
-				}
+				while (rot_index < rot_size || loc_index < loc_size || scale_index < scale_size) {
+					int *lowest_index = nullptr;
+					float lowest_time = FLT_MAX;
+					if (rot_index < rot_size) {
+						lowest_time = track.rotation_track.times[rot_index];
+						lowest_index = &rot_index;
+					}
+					if (loc_index < loc_size) {
+						float loc_time = track.translation_track.times[loc_index];
+						if (loc_time < lowest_time || !lowest_index) {
+							lowest_time = loc_time;
+							lowest_index = &loc_index;
+						}
+					}
+					if (scale_index < scale_size) {
+						float scale_time = track.scale_track.times[scale_index];
+						if (scale_time < lowest_time || !lowest_index) {
+							lowest_time = scale_time;
+							lowest_index = &scale_index;
+						}
+					}
+					if (lowest_time > time + CMP_EPSILON) {
+						time = lowest_time;
 
-				if (track.scale_track.times.size()) {
-					scale = _interpolate_track<Vector3>(track.scale_track.times, track.scale_track.values, time, track.scale_track.interpolation);
-				}
+						Vector3 pos = base_pos;
+						Quat rot = base_rot;
+						Vector3 scale = base_scale;
 
-				if (node->skeleton >= 0) {
+						if (loc_size > 0) {
+							pos = _interpolate_track<Vector3>(track.translation_track.times, track.translation_track.values, time, track.translation_track.interpolation);
+						}
+						if (rot_size > 0) {
+							rot = _interpolate_track<Quat>(track.rotation_track.times, track.rotation_track.values, time, track.rotation_track.interpolation);
+						}
+						if (scale_size > 0) {
+							scale = _interpolate_track<Vector3>(track.scale_track.times, track.scale_track.values, time, track.scale_track.interpolation);
+						}
 
-					Transform xform;
-					xform.basis.set_quat_scale(rot, scale);
-					xform.origin = pos;
+						if (node->skeleton >= 0) {
 
-					const Skeleton *skeleton = state.skeletons[node->skeleton].godot_skeleton;
-					const int bone_idx = skeleton->find_bone(node->name);
-					xform = skeleton->get_bone_rest(bone_idx).affine_inverse() * xform;
+							Transform xform;
+							xform.basis.set_quat_scale(rot, scale);
+							xform.origin = pos;
 
-					rot = xform.basis.get_rotation_quat();
-					rot.normalize();
-					scale = xform.basis.get_scale();
-					pos = xform.origin;
-				}
+							const Skeleton *skeleton = state.skeletons[node->skeleton].godot_skeleton;
+							const int bone_idx = skeleton->find_bone(node->name);
+							xform = skeleton->get_bone_rest(bone_idx).affine_inverse() * xform;
 
-				animation->transform_track_insert_key(track_idx, time, pos, rot, scale);
+							rot = xform.basis.get_rotation_quat();
+							rot.normalize();
+							scale = xform.basis.get_scale();
+							pos = xform.origin;
+						}
 
-				if (last) {
-					break;
-				}
-				time += increment;
-				if (time >= length) {
-					last = true;
-					time = length;
+						animation->transform_track_insert_key(track_idx, time, pos, rot, scale);
+					}
+					++(*lowest_index);
 				}
 			}
 		}
 
+		// TODO: Shape key support for not overriding FPS setting.
 		for (int i = 0; i < track.weight_tracks.size(); i++) {
 			ERR_CONTINUE(node->mesh < 0 || node->mesh >= state.meshes.size());
 			const GLTFMesh &mesh = state.meshes[node->mesh];
@@ -3000,6 +3072,7 @@ Node *EditorSceneImporterGLTF::import_scene(const String &p_path, uint32_t p_fla
 	state.major_version = version.get_slice(".", 0).to_int();
 	state.minor_version = version.get_slice(".", 1).to_int();
 	state.use_named_skin_binds = p_flags & IMPORT_USE_NAMED_SKIN_BINDS;
+	state.override_fps = p_flags & IMPORT_ANIMATION_OVERRIDE_FPS;
 
 	/* STEP 0 PARSE SCENE */
 	Error err = _parse_scenes(state);
