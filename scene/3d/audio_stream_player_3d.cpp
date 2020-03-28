@@ -1060,7 +1060,7 @@ AudioStreamPlayer3D::AudioStreamPlayer3D() {
 	emission_angle_enabled = false;
 	emission_angle_filter_attenuation_db = -12;
 	attenuation_filter_cutoff_hz = 5000;
-	attenuation_filter_db = -24;
+	attenuation_filter_db = 0; // jit - default to 0.  We don't want this behavior by default as it messes with sound design
 	out_of_range_mode = OUT_OF_RANGE_MIX;
 	doppler_tracking = DOPPLER_TRACKING_DISABLED;
 	stream_paused = false;
