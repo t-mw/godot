@@ -179,6 +179,7 @@ public:
 	void update_gravity();
 
 	bool test_body_motion(RigidBodyBullet *p_body, const Transform &p_from, const Vector3 &p_motion, bool p_infinite_inertia, PhysicsServer::MotionResult *r_result, bool p_exclude_raycast_shapes);
+	void convex_sweep_test(btCollisionWorld *p_world, btConvexShape *p_cast_shape, const btTransform &p_convex_from_world, const btTransform &p_convex_to_world, btCollisionWorld::ConvexResultCallback &p_result_callback, btScalar p_allowed_ccd_penetration) const;
 	int test_ray_separation(RigidBodyBullet *p_body, const Transform &p_transform, bool p_infinite_inertia, Vector3 &r_recover_motion, PhysicsServer::SeparationResult *r_results, int p_result_max, float p_margin);
 
 private:
