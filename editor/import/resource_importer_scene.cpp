@@ -389,13 +389,18 @@ Node *ResourceImporterScene::_fix_node(Node *p_node, Node *p_root, Map<Ref<Mesh>
 				} else if (_teststr(name, "colonly")) {
 					_gen_shape_list(mesh, shapes, false);
 					collision_map[mesh] = shapes;
-				} else if (_teststr(name, "convcolonly")) {
+				} else if (_teststr(name, "convcoldecomponly")) {
 					_gen_shape_list(mesh, shapes, true);
+					collision_map[mesh] = shapes;
+				} else if (_teststr(name, "convcolonly")) {
+					shapes.push_back(mesh->create_convex_shape());
 					collision_map[mesh] = shapes;
 				}
 
 				if (_teststr(name, "colonly")) {
 					fixed_name = _fixstr(name, "colonly");
+				} else if (_teststr(name, "convcoldecomponly")) {
+					fixed_name = _fixstr(name, "convcoldecomponly");
 				} else if (_teststr(name, "convcolonly")) {
 					fixed_name = _fixstr(name, "convcolonly");
 				}
