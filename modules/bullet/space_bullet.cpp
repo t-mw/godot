@@ -54,7 +54,7 @@
 
 #include <assert.h>
 
-#pragma optimize("", off)
+//#pragma optimize("", off)
 /**
 	@author AndreaCatania
 */
