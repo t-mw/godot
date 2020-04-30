@@ -892,7 +892,7 @@ static Ref<SpatialMaterial> red_mat;
 static Ref<SpatialMaterial> blue_mat;
 #endif
 
-#if 0 // Godot's bullet physics (with my tweaks)
+#if 1 // Godot's bullet physics (with my tweaks)
 bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_from, const Vector3 &p_motion, bool p_infinite_inertia, PhysicsServer::MotionResult *r_result, bool p_exclude_raycast_shapes) {
 
 #if debug_test_motion
